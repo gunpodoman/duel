@@ -1,97 +1,79 @@
-// --- [1] 게임 상수 및 상태 ---
+// --- [1] 게임 설정 및 상수 ---
 const GRAVITY = 0.25;
-const HIT_RADIUS = 30;
+const MAX_HP = 200;       // 체력 상향
+const SPLASH_RADIUS = 80; // 스플래시 범위
+const MAX_DAMAGE = 70;    // 직격 시 최대 데미지
+
 let canvas, ctx, w, h, myId, conn, isHost = false, myNum = 0;
 let particles = [];
 let state = {
     terrain: [],
-    p1: { x: 0, y: 0, hp: 100, angle: -0.5 },
-    p2: { x: 0, y: 0, hp: 100, angle: 3.6 },
+    p1: { x: 0, y: 0, hp: MAX_HP, angle: -0.5 },
+    p2: { x: 0, y: 0, hp: MAX_HP, angle: 3.6 },
     turn: 1, wind: 0, ball: null, gameOver: false, winner: 0
 };
 
-// --- [2] 네트워크 핸드셰이크 ---
-const peer = new Peer(null, {
-    config: { 'iceServers': [{ urls: 'stun:stun.l.google.com:19302' }, { urls: 'stun:stun1.l.google.com:19302' }] }
-});
+// --- [2] 네트워크 (기존 안정화 버전 유지) ---
+const peer = new Peer(null, { config: { 'iceServers': [{ urls: 'stun:stun.l.google.com:19302' }] } });
 
 peer.on('open', id => {
     myId = id;
-    const btn = document.getElementById('invite-btn');
-    btn.disabled = false;
-    btn.innerText = "초대 링크 복사";
-    document.getElementById('status').innerText = "준비 완료. 링크를 보내세요.";
+    document.getElementById('invite-btn').disabled = false;
     if(window.location.hash) connectTo(window.location.hash.substring(1));
 });
 
-peer.on('connection', c => {
-    conn = c; isHost = true; myNum = 1;
-    setupConn();
-});
-
-function connectTo(hostId) {
-    conn = peer.connect(hostId, { reliable: true });
-    isHost = false; myNum = 2;
-    setupConn();
-}
+peer.on('connection', c => { conn = c; isHost = true; myNum = 1; setupConn(); });
+function connectTo(hId) { conn = peer.connect(hId, { reliable: true }); isHost = false; myNum = 2; setupConn(); }
 
 function setupConn() {
     conn.on('open', () => {
         document.getElementById('overlay').style.display = 'none';
         document.getElementById('game-ui').style.display = 'block';
         initCanvas();
-        if(isHost) {
-            createTerrain();
-        } else {
-            conn.send({ type: 'REQ_INIT' });
-        }
+        if(isHost) createTerrain(); else conn.send({ type: 'REQ_INIT' });
         requestAnimationFrame(loop);
     });
-
     conn.on('data', data => {
-        if(data.type === 'REQ_INIT' && isHost) {
-            sync();
-        }
-        if(data.type === 'SYNC') {
-            state = data.state;
-            updateUI();
-        }
-        if(data.type === 'FIRE') {
-            state.ball = data.ball;
-        }
+        if(data.type === 'REQ_INIT' && isHost) sync();
+        if(data.type === 'SYNC') { state = data.state; updateUI(); }
+        if(data.type === 'FIRE') state.ball = data.ball;
     });
 }
 
-function sync() {
-    if(isHost && conn && conn.open) {
-        conn.send({ type: 'SYNC', state: state });
-    }
-    updateUI();
-}
+function sync() { if(isHost && conn?.open) conn.send({ type: 'SYNC', state }); updateUI(); }
 
-// --- [3] 물리 엔진 및 턴 로직 ---
+// --- [3] 물리 엔진 (스플래시 데미지 핵심) ---
 function update() {
     if(!state.ball || state.gameOver) return;
 
     const b = state.ball;
     b.vx += b.wind; b.vy += GRAVITY; b.x += b.vx; b.y += b.vy;
 
-    const target = state.turn === 1 ? state.p2 : state.p1;
-    const dist = Math.sqrt((b.x - target.x)**2 + (b.y - (target.y - 15))**2);
     const groundY = getTerrainY(b.x);
-    
-    if(dist < HIT_RADIUS || b.y > groundY || b.x < 0 || b.x > w) {
-        createBoom(b.x, b.y, state.turn === 1 ? '#3b82f6' : '#ef4444');
+    const distP1 = Math.sqrt((b.x - state.p1.x)**2 + (b.y - (state.p1.y - 15))**2);
+    const distP2 = Math.sqrt((b.x - state.p2.x)**2 + (b.y - (state.p2.y - 15))**2);
+
+    // 충돌 판정 (지면 충돌 혹은 탱크 근처)
+    if(b.y > groundY || distP1 < 20 || distP2 < 20 || b.x < 0 || b.x > w) {
+        createBoom(b.x, b.y);
         
         if(isHost) {
-            if(dist < HIT_RADIUS + 10) {
-                target.hp = Math.max(0, target.hp - 34);
-                if(target.hp <= 0) { state.gameOver = true; state.winner = state.turn; }
-            }
+            // 스플래시 데미지 계산 함수
+            const calcDmg = (dist) => {
+                if (dist > SPLASH_RADIUS) return 0;
+                return Math.floor(MAX_DAMAGE * (1 - dist / SPLASH_RADIUS));
+            };
+
+            state.p1.hp = Math.max(0, state.p1.hp - calcDmg(distP1));
+            state.p2.hp = Math.max(0, state.p2.hp - calcDmg(distP2));
+
+            if(state.p1.hp <= 0) { state.gameOver = true; state.winner = 2; }
+            else if(state.p2.hp <= 0) { state.gameOver = true; state.winner = 1; }
+
             state.ball = null;
             if(!state.gameOver) {
                 state.turn = state.turn === 1 ? 2 : 1;
-                state.wind = (Math.random() - 0.5) * 0.4;
+                state.wind = (Math.random() - 0.5) * 0.5;
             }
             sync();
         } else {
@@ -100,36 +82,51 @@ function update() {
     }
 }
 
-// --- [4] 입력 및 UI ---
-let input = { active:false, sx:0, sy:0, cx:0, cy:0 };
-function setupInput() {
-    canvas.addEventListener('pointerdown', e => {
-        if(state.turn !== myNum || state.ball || state.gameOver) return;
-        input.active = true; input.sx = input.cx = e.clientX; input.sy = input.cy = e.clientY;
-    });
-    window.addEventListener('pointermove', e => {
-        if(!input.active) return;
-        input.cx = e.clientX; input.cy = e.clientY;
-        const p = myNum === 1 ? state.p1 : state.p2;
-        p.angle = Math.atan2(input.sy - input.cy, input.sx - input.cx);
-    });
-    window.addEventListener('pointerup', () => {
-        if(!input.active) return;
-        input.active = false;
-        const dx = input.sx - input.cx, dy = input.sy - input.cy;
-        const pwr = Math.min(Math.sqrt(dx*dx+dy*dy)*0.15, 25);
-        const ang = Math.atan2(dy, dx);
-        if(pwr > 3) {
-            const ball = { x:(myNum===1?state.p1.x:state.p2.x), y:(myNum===1?state.p1.y:state.p2.y)-15, vx:Math.cos(ang)*pwr, vy:Math.sin(ang)*pwr, wind:state.wind };
-            state.ball = ball;
-            conn.send({ type: 'FIRE', ball: ball });
-        }
+// --- [4] 그래픽 (맵 가시성 대폭 개선) ---
+function draw() {
+    ctx.clearRect(0,0,w,h);
+    // 우주 배경
+    let sky = ctx.createLinearGradient(0,0,0,h);
+    sky.addColorStop(0,'#020617'); sky.addColorStop(1,'#0f172a');
+    ctx.fillStyle = sky; ctx.fillRect(0,0,w,h);
+    
+    // 지형 그리기 (그라데이션 추가)
+    if(state.terrain.length) {
+        ctx.beginPath(); ctx.moveTo(0, h);
+        state.terrain.forEach(p => ctx.lineTo(p.x, p.y));
+        ctx.lineTo(w, h); ctx.closePath();
+        
+        let terr = ctx.createLinearGradient(0, h*0.4, 0, h);
+        terr.addColorStop(0, '#334155'); terr.addColorStop(1, '#0f172a');
+        ctx.fillStyle = terr; ctx.fill();
+
+        // 지형 윤곽선 (밝게)
+        ctx.beginPath();
+        state.terrain.forEach((p, i) => i === 0 ? ctx.moveTo(p.x, p.y) : ctx.lineTo(p.x, p.y));
+        ctx.strokeStyle = '#64748b'; ctx.lineWidth = 4; ctx.stroke();
+    }
+
+    drawTank(state.p1, 1); drawTank(state.p2, 2);
+    
+    if(state.ball) {
+        ctx.fillStyle = '#fff'; ctx.shadowBlur = 15; ctx.shadowColor = '#fff';
+        ctx.beginPath(); ctx.arc(state.ball.x, state.ball.y, 6, 0, Math.PI*2); ctx.fill();
+        ctx.shadowBlur = 0;
+    }
+    
+    if(input.active && state.turn === myNum && !state.ball) drawGuide();
+    
+    particles.forEach((p,i) => {
+        p.x += p.vx; p.y += p.vy; p.a -= 0.02;
+        ctx.fillStyle = `rgba(${p.c}, ${p.a})`; ctx.fillRect(p.x, p.y, p.s, p.s);
+        if(p.a <= 0) particles.splice(i,1);
     });
 }
 
 function updateUI() {
-    document.getElementById('hp1').style.width = state.p1.hp + '%';
-    document.getElementById('hp2').style.width = state.p2.hp + '%';
+    // 퍼센트 계산 (MAX_HP 기준)
+    document.getElementById('hp1').style.width = (state.p1.hp / MAX_HP * 100) + '%';
+    document.getElementById('hp2').style.width = (state.p2.hp / MAX_HP * 100) + '%';
     document.getElementById('wind-ui').innerText = `WIND: ${Math.abs(state.wind*100).toFixed(1)} ${state.wind>=0?'→':'←'}`;
     const msg = document.getElementById('msg');
     if(state.gameOver) {
@@ -142,18 +139,14 @@ function updateUI() {
     msg.classList.add('show');
 }
 
-// --- [5] 유틸리티 및 렌더링 ---
-function initCanvas() {
-    canvas = document.getElementById('gameCanvas'); ctx = canvas.getContext('2d');
-    resize(); window.addEventListener('resize', resize); setupInput();
-}
+// --- 나머지 보조 함수들 (유지) ---
+function initCanvas() { canvas = document.getElementById('gameCanvas'); ctx = canvas.getContext('2d'); resize(); window.onresize = resize; setupInput(); }
 function resize() { w = canvas.width = window.innerWidth; h = canvas.height = window.innerHeight; }
 function createTerrain() {
     state.terrain = []; let curH = h * 0.7;
     for(let x = 0; x <= w + 100; x += 50) {
         curH += (Math.random() - 0.5) * 120;
-        curH = Math.max(h * 0.4, Math.min(h * 0.85, curH));
-        state.terrain.push({x, y: curH});
+        state.terrain.push({x, y: Math.max(h*0.4, Math.min(h*0.85, curH))});
     }
     state.p1.x = w * 0.15; state.p1.y = getTerrainY(state.p1.x);
     state.p2.x = w * 0.85; state.p2.y = getTerrainY(state.p2.x);
@@ -169,47 +162,6 @@ function getTerrainY(x) {
     return h;
 }
 function loop() { update(); draw(); requestAnimationFrame(loop); }
-
-// [수정됨] draw 함수: 지형 렌더링 개선
-function draw() {
-    ctx.clearRect(0,0,w,h);
-    // 하늘 배경
-    let g = ctx.createLinearGradient(0,0,0,h); g.addColorStop(0,'#020617'); g.addColorStop(1,'#1e293b');
-    ctx.fillStyle = g; ctx.fillRect(0,0,w,h);
-    
-    // 지형 그리기
-    if(state.terrain.length) {
-        // 땅 채우기
-        ctx.beginPath(); ctx.moveTo(0, h);
-        state.terrain.forEach(p => ctx.lineTo(p.x, p.y));
-        ctx.lineTo(w, h); ctx.closePath();
-        ctx.fillStyle = '#334155'; // 더 밝은 색으로 변경하여 가시성 확보
-        ctx.fill();
-
-        // 지형 표면 테두리 선 그리기
-        ctx.beginPath();
-        state.terrain.forEach((p, i) => {
-             if(i===0) ctx.moveTo(p.x, p.y); else ctx.lineTo(p.x, p.y);
-        });
-        ctx.strokeStyle = '#94a3b8'; // 밝은 회색 선
-        ctx.lineWidth = 3;
-        ctx.stroke();
-    }
-
-    drawTank(state.p1, 1); drawTank(state.p2, 2);
-    if(state.ball) {
-        ctx.fillStyle = '#fff'; ctx.shadowBlur = 15; ctx.shadowColor = '#fff';
-        ctx.beginPath(); ctx.arc(state.ball.x, state.ball.y, 6, 0, Math.PI*2); ctx.fill();
-        ctx.shadowBlur = 0;
-    }
-    if(input.active && state.turn === myNum && !state.ball) drawGuide();
-    particles.forEach((p,i) => {
-        p.x += p.vx; p.y += p.vy; p.a -= 0.02;
-        ctx.fillStyle = `rgba(${p.c}, ${p.a})`; ctx.fillRect(p.x, p.y, p.s, p.s);
-        if(p.a <= 0) particles.splice(i,1);
-    });
-}
-
 function drawTank(p, n) {
     ctx.save(); ctx.translate(p.x, p.y);
     ctx.fillStyle = n === 1 ? '#3b82f6' : '#ef4444';
@@ -229,11 +181,13 @@ function drawGuide() {
     for(let i=0; i<40; i++) { ctx.lineTo(tx, ty); tvx += state.wind; tvy += GRAVITY; tx += tvx; ty += tvy; }
     ctx.stroke(); ctx.setLineDash([]);
 }
-function createBoom(x, y, color) {
-    const rgb = color === '#3b82f6' ? '59, 130, 246' : '239, 68, 68';
-    for(let i=0; i<30; i++) particles.push({ x, y, vx:(Math.random()-0.5)*12, vy:(Math.random()-0.5)*12, s:Math.random()*6+2, a:1, c:rgb });
+function createBoom(x, y) {
+    for(let i=0; i<40; i++) particles.push({ x, y, vx:(Math.random()-0.5)*15, vy:(Math.random()-0.5)*15, s:Math.random()*8+2, a:1, c:'251, 191, 36' });
 }
-function copyLink() {
-    const url = `${window.location.origin}${window.location.pathname}#${myId}`;
-    navigator.clipboard.writeText(url).then(() => document.getElementById('status').innerText = "복사 완료! 친구를 초대하세요.");
+let input = { active:false, sx:0, sy:0, cx:0, cy:0 };
+function setupInput() {
+    canvas.onpointerdown = e => { if(state.turn===myNum && !state.ball && !state.gameOver) { input.active=true; input.sx=input.cx=e.clientX; input.sy=input.cy=e.clientY; }};
+    window.onpointermove = e => { if(input.active) { input.cx=e.clientX; input.cy=e.clientY; (myNum===1?state.p1:state.p2).angle = Math.atan2(input.sy-input.cy, input.sx-input.cx); }};
+    window.onpointerup = () => { if(input.active) { input.active=false; const dx=input.sx-input.cx, dy=input.sy-input.cy, pwr=Math.min(Math.sqrt(dx*dx+dy*dy)*0.15, 25), ang=Math.atan2(dy,dx); if(pwr>3) { const b={ x:(myNum===1?state.p1.x:state.p2.x), y:(myNum===1?state.p1.y:state.p2.y)-15, vx:Math.cos(ang)*pwr, vy:Math.sin(ang)*pwr, wind:state.wind }; state.ball=b; conn.send({type:'FIRE', ball:b}); }}};
 }
+function copyLink() { navigator.clipboard.writeText(`${window.location.origin}${window.location.pathname}#${myId}`).then(() => document.getElementById('status').innerText="복사 완료!"); }
