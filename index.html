@@ -3,120 +3,149 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Core Artillery: Ultimate</title>
+    <title>Artillery Duel: Ultimate Sync</title>
     <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
     <style>
-        :root {
-            --p1-color: #3b82f6; --p2-color: #ef4444;
-            --accent: #f59e0b; --bg-dark: #0f172a;
-        }
-        body { margin: 0; overflow: hidden; background: var(--bg-dark); font-family: 'Segoe UI', system-ui, sans-serif; touch-action: none; color: white; }
+        :root { --p1: #3b82f6; --p2: #ef4444; --accent: #fbbf24; --bg: #0f172a; }
+        body { margin: 0; overflow: hidden; background: var(--bg); font-family: system-ui, -apple-system, sans-serif; touch-action: none; color: white; }
         
-        /* 로딩 및 초대 화면 */
-        #overlay { position: fixed; inset: 0; background: radial-gradient(circle, #1e293b 0%, #000 100%); z-index: 100; display: flex; flex-direction: column; align-items: center; justify-content: center; transition: 0.5s; }
-        .card { background: rgba(255,255,255,0.05); padding: 40px; border-radius: 30px; border: 1px solid rgba(255,255,255,0.1); backdrop-filter: blur(10px); text-align: center; box-shadow: 0 20px 50px rgba(0,0,0,0.5); }
-        .btn { padding: 15px 40px; background: var(--accent); border: none; border-radius: 50px; font-weight: bold; font-size: 18px; cursor: pointer; color: #000; transition: 0.3s; box-shadow: 0 0 20px rgba(245,158,11,0.4); }
-        .btn:hover { transform: scale(1.05); background: #ffb833; }
-        .btn:disabled { background: #444; color: #888; box-shadow: none; cursor: wait; }
+        /* 로딩/초대 UI */
+        #overlay { position: fixed; inset: 0; background: radial-gradient(circle at center, #1e293b 0%, #020617 100%); z-index: 100; display: flex; align-items: center; justify-content: center; }
+        .setup-card { background: rgba(255,255,255,0.03); padding: 40px; border-radius: 32px; border: 1px solid rgba(255,255,255,0.1); backdrop-filter: blur(20px); text-align: center; width: 320px; }
+        .btn { width: 100%; padding: 16px; background: var(--accent); border: none; border-radius: 16px; font-weight: 800; font-size: 18px; cursor: pointer; color: #000; transition: 0.2s; box-shadow: 0 0 20px rgba(251,191,36,0.3); }
+        .btn:disabled { background: #334155; color: #94a3b8; box-shadow: none; cursor: wait; }
 
-        /* 게임 UI */
-        #game-ui { position: absolute; inset: 0; pointer-events: none; display: none; }
-        .status-bar { position: absolute; top: 20px; width: 100%; display: flex; justify-content: space-around; padding: 0 20px; box-sizing: border-box; }
-        .hp-card { background: rgba(0,0,0,0.5); padding: 10px 20px; border-radius: 15px; border-bottom: 4px solid transparent; width: 180px; }
-        .hp-bg { width: 100%; height: 12px; background: #334155; border-radius: 6px; margin-top: 8px; overflow: hidden; }
-        .hp-fill { height: 100%; transition: width 0.5s cubic-bezier(0.17, 0.67, 0.83, 0.67); }
+        /* 게임 메인 UI */
+        #game-container { display: none; width: 100vw; height: 100vh; position: relative; }
+        #ui-layer { position: absolute; inset: 0; pointer-events: none; padding: 20px; }
+        .status-container { display: flex; justify-content: space-between; align-items: flex-start; }
+        .p-panel { background: rgba(0,0,0,0.4); padding: 12px 20px; border-radius: 20px; border: 1px solid rgba(255,255,255,0.1); width: 140px; }
+        .hp-bar { width: 100%; height: 8px; background: #1e293b; border-radius: 4px; margin-top: 8px; overflow: hidden; }
+        .hp-inner { height: 100%; transition: width 0.5s ease-out; }
         
-        #wind-box { position: absolute; top: 20px; left: 50%; transform: translateX(-50%); text-align: center; background: rgba(0,0,0,0.3); padding: 5px 20px; border-radius: 20px; }
-        #turn-msg { position: absolute; top: 100px; width: 100%; text-align: center; font-size: 32px; font-weight: 900; text-transform: uppercase; letter-spacing: 2px; text-shadow: 0 0 20px rgba(255,255,255,0.5); opacity: 0; transition: 0.3s; }
-        #turn-msg.show { opacity: 1; transform: translateY(10px); }
+        #wind-display { background: rgba(0,0,0,0.5); padding: 8px 16px; border-radius: 40px; border: 1px solid var(--accent); font-weight: 900; }
+        #message { position: absolute; top: 120px; width: 100%; text-align: center; font-size: 36px; font-weight: 900; text-shadow: 0 0 20px rgba(0,0,0,0.5); transform: translateY(20px); opacity: 0; transition: 0.4s; }
+        #message.show { transform: translateY(0); opacity: 1; }
     </style>
 </head>
 <body>
 
 <div id="overlay">
-    <div class="card">
-        <h1 style="margin:0 0 10px 0; letter-spacing: -1px;">CANNON DUEL</h1>
-        <p style="color: #94a3b8; margin-bottom: 30px;">최고의 포격수를 가리는 대결</p>
-        <button id="invite-btn" class="btn" onclick="copyInvite()" disabled>초대 링크 생성 중...</button>
+    <div class="setup-card">
+        <h1 style="margin: 0 0 8px 0; font-size: 28px;">CANNON DUEL</h1>
+        <p style="color: #94a3b8; margin-bottom: 32px; font-size: 14px;">상대를 조준하고 포격하세요!</p>
+        <button id="invite-btn" class="btn" onclick="copyLink()" disabled>연결 서버 접속 중...</button>
+        <p id="conn-status" style="margin-top: 16px; font-size: 12px; color: var(--accent);"></p>
     </div>
 </div>
 
-<div id="game-ui">
-    <div class="status-bar">
-        <div class="hp-card" style="border-color: var(--p1-color)">
-            <span style="font-size:12px; color:#94a3b8">PLAYER 1</span>
-            <div class="hp-bg"><div id="hp-p1" class="hp-fill" style="width:100%; background:var(--p1-color)"></div></div>
+<div id="game-container">
+    <canvas id="gameCanvas"></canvas>
+    <div id="ui-layer">
+        <div class="status-container">
+            <div class="p-panel" style="border-left: 4px solid var(--p1)">
+                <div style="font-size: 12px; opacity: 0.7;">PLAYER 1</div>
+                <div class="hp-bar"><div id="hp-1" class="hp-inner" style="width: 100%; background: var(--p1);"></div></div>
+            </div>
+            <div id="wind-display">WIND: 0.00 →</div>
+            <div class="p-panel" style="border-right: 4px solid var(--p2); text-align: right;">
+                <div style="font-size: 12px; opacity: 0.7;">PLAYER 2</div>
+                <div class="hp-bar"><div id="hp-2" class="hp-inner" style="width: 100%; background: var(--p2);"></div></div>
+            </div>
         </div>
-        <div id="wind-box">
-            <div id="wind-text" style="font-size:14px; font-weight:bold">WIND: 0</div>
-            <div id="wind-arrow" style="font-size:20px">→</div>
-        </div>
-        <div class="hp-card" style="border-color: var(--p2-color); text-align: right;">
-            <span style="font-size:12px; color:#94a3b8">PLAYER 2</span>
-            <div class="hp-bg"><div id="hp-p2" class="hp-fill" style="width:100%; background:var(--p2-color)"></div></div>
-        </div>
+        <div id="message">READY</div>
     </div>
-    <div id="turn-msg">YOUR TURN</div>
 </div>
-
-<canvas id="gameCanvas"></canvas>
 
 <script>
     // --- 설정 및 상수 ---
     const GRAVITY = 0.25;
     const TANK_SIZE = 35;
     let canvas, ctx, w, h;
-    let myId, conn, isHost = false, iAmP1 = false;
-    let particles = [];
+    let myId, conn, isHost = false, myNum = 0;
+    let explosions = [];
 
     // --- 게임 상태 ---
-    let state = {
+    let gameState = {
         terrain: [],
-        p1: { x: 0, y: 0, hp: 100, color: '#3b82f6', angle: 0 },
-        p2: { x: 0, y: 0, hp: 100, color: '#ef4444', angle: 0 },
+        p1: { x: 100, y: 0, hp: 100, angle: -0.5 },
+        p2: { x: 0, y: 0, hp: 100, angle: 3.6 },
         turn: 1,
         wind: 0,
-        ball: null,
+        ball: null, // 포탄 물리 객체
         gameOver: false
     };
 
-    // --- 초기화 및 네트워크 ---
-    const peer = new Peer(null, { config: {'iceServers': [{ url: 'stun:stun.l.google.com:19302' }]} });
-    
+    // --- 1. 안정적인 PeerJS 연결 시스템 ---
+    const peer = new Peer(null, {
+        config: {'iceServers': [{ url: 'stun:stun.l.google.com:19302' }, { url: 'stun:stun1.l.google.com:19302' }]},
+        debug: 1
+    });
+
     peer.on('open', id => {
         myId = id;
         document.getElementById('invite-btn').disabled = false;
         document.getElementById('invite-btn').innerText = "초대 링크 복사";
-        if(window.location.hash) connectTo(window.location.hash.substring(1));
+        if(window.location.hash) connectToHost(window.location.hash.substring(1));
     });
 
-    peer.on('connection', c => { conn = c; isHost = true; iAmP1 = true; setupConn(); });
+    // 호스트 입장에서 게스트를 맞이함
+    peer.on('connection', c => {
+        if(conn) return; // 이미 연결된 경우 차단
+        conn = c; isHost = true; myNum = 1;
+        setupConn();
+    });
 
-    function copyInvite() {
-        navigator.clipboard.writeText(`${window.location.origin}${window.location.pathname}#${myId}`);
-        alert("링크가 복사되었습니다! 상대에게 보내세요.");
+    function connectToHost(targetId) {
+        document.getElementById('conn-status').innerText = "호스트에 연결 시도 중...";
+        conn = peer.connect(targetId, { reliable: true });
+        isHost = false; myNum = 2;
+        setupConn();
     }
-
-    function connectTo(tid) { conn = peer.connect(tid); isHost = false; iAmP1 = false; setupConn(); }
 
     function setupConn() {
         conn.on('open', () => {
-            document.getElementById('overlay').style.opacity = '0';
-            setTimeout(() => {
-                document.getElementById('overlay').style.display = 'none';
-                document.getElementById('game-ui').style.display = 'block';
-                initCanvas();
-                if(isHost) initGame();
-                requestAnimationFrame(loop);
-            }, 500);
+            document.getElementById('overlay').style.display = 'none';
+            document.getElementById('game-container').style.display = 'block';
+            initCanvas();
+            if(isHost) {
+                generateTerrain();
+                sendSync();
+            }
+            requestAnimationFrame(gameLoop);
         });
+
         conn.on('data', data => {
-            if(data.type === 'SYNC') { state = data.state; updateUI(); }
-            if(data.type === 'FIRE' && isHost) fire(data.angle, data.power);
-            if(data.type === 'BOOM') createExplosion(data.x, data.y, data.color);
+            if(data.type === 'SYNC') {
+                gameState.terrain = data.terrain;
+                gameState.p1 = data.p1;
+                gameState.p2 = data.p2;
+                gameState.wind = data.wind;
+                gameState.turn = data.turn;
+                updateUI();
+            }
+            if(data.type === 'FIRE_EVENT') {
+                // 핵심: 각자 화면에서 물리 엔진 가동
+                gameState.ball = {
+                    x: data.x, y: data.y,
+                    vx: data.vx, vy: data.vy,
+                    wind: data.wind // 발사 시점의 바람 고정
+                };
+            }
+        });
+
+        conn.on('close', () => { alert("상대방과 연결이 끊어졌습니다."); location.reload(); });
+        conn.on('error', () => { alert("연결 오류가 발생했습니다."); location.reload(); });
+    }
+
+    function copyLink() {
+        const link = `${window.location.origin}${window.location.pathname}#${myId}`;
+        navigator.clipboard.writeText(link).then(() => {
+            document.getElementById('conn-status').innerText = "링크 복사 완료! 상대방이 들어오면 시작됩니다.";
         });
     }
 
+    // --- 2. 물리 및 게임 로직 ---
     function initCanvas() {
         canvas = document.getElementById('gameCanvas');
         ctx = canvas.getContext('2d');
@@ -128,219 +157,216 @@
     function resize() {
         w = canvas.width = window.innerWidth;
         h = canvas.height = window.innerHeight;
-        if(isHost && state.terrain.length === 0) initGame();
     }
 
-    // --- 게임 로직 ---
-    function initGame() {
-        state.terrain = [];
-        let currH = h * 0.7;
-        for(let x = 0; x <= w + 40; x += 40) {
-            currH += (Math.random() - 0.5) * 100;
-            currH = Math.max(h * 0.4, Math.min(h * 0.85, currH));
-            state.terrain.push({x, y: currH});
+    function generateTerrain() {
+        gameState.terrain = [];
+        let curH = h * 0.7;
+        for(let x = 0; x <= w + 100; x += 50) {
+            curH += (Math.random() - 0.5) * 120;
+            curH = Math.max(h * 0.4, Math.min(h * 0.8, curH));
+            gameState.terrain.push({x, y: curH});
         }
-        state.p1.x = w * 0.15; state.p1.y = getTerrainY(state.p1.x);
-        state.p2.x = w * 0.85; state.p2.y = getTerrainY(state.p2.x);
-        state.wind = (Math.random() - 0.5) * 0.3;
-        sync();
+        gameState.p1.x = w * 0.15; gameState.p1.y = getTerrainY(gameState.p1.x);
+        gameState.p2.x = w * 0.85; gameState.p2.y = getTerrainY(gameState.p2.x);
+        gameState.wind = (Math.random() - 0.5) * 0.4;
     }
 
     function getTerrainY(x) {
-        for(let i=0; i < state.terrain.length - 1; i++) {
-            if(x >= state.terrain[i].x && x <= state.terrain[i+1].x) {
-                let ratio = (x - state.terrain[i].x) / (state.terrain[i+1].x - state.terrain[i].x);
-                return state.terrain[i].y * (1 - ratio) + state.terrain[i+1].y * ratio;
+        for(let i=0; i<gameState.terrain.length-1; i++) {
+            if(x >= gameState.terrain[i].x && x <= gameState.terrain[i+1].x) {
+                let r = (x - gameState.terrain[i].x) / (gameState.terrain[i+1].x - gameState.terrain[i].x);
+                return gameState.terrain[i].y * (1-r) + gameState.terrain[i+1].y * r;
             }
         }
         return h;
     }
 
-    function fire(angle, power) {
-        if(state.ball || state.gameOver) return;
-        const p = state.turn === 1 ? state.p1 : state.p2;
-        state.ball = { x: p.x, y: p.y - 20, vx: Math.cos(angle) * power, vy: Math.sin(angle) * power };
-        sync();
-    }
-
-    function sync() { if(isHost) conn.send({type: 'SYNC', state}); updateUI(); }
-
-    // --- 렌더링 엔진 ---
-    function loop() {
-        update();
-        draw();
-        requestAnimationFrame(loop);
-    }
-
-    function update() {
+    function sendSync() {
         if(!isHost) return;
-        if(state.ball) {
-            state.ball.vx += state.wind;
-            state.ball.vy += GRAVITY;
-            state.ball.x += state.ball.vx;
-            state.ball.y += state.ball.vy;
+        conn.send({
+            type: 'SYNC',
+            terrain: gameState.terrain,
+            p1: gameState.p1, p2: gameState.p2,
+            wind: gameState.wind, turn: gameState.turn
+        });
+        updateUI();
+    }
 
-            let groundY = getTerrainY(state.ball.x);
-            if(state.ball.y > groundY || state.ball.x < 0 || state.ball.x > w) {
-                // 충돌 판정
-                checkHit(state.ball.x, state.ball.y);
-                const boomData = {type: 'BOOM', x: state.ball.x, y: state.ball.y, color: state.turn === 1 ? state.p1.color : state.p2.color};
-                createExplosion(boomData.x, boomData.y, boomData.color);
-                conn.send(boomData);
-                
-                state.ball = null;
-                state.turn = state.turn === 1 ? 2 : 1;
-                state.wind = (Math.random() - 0.5) * 0.3;
-                sync();
+    // --- 3. 렌더링 및 애니메이션 ---
+    function gameLoop() {
+        updatePhysics();
+        draw();
+        requestAnimationFrame(gameLoop);
+    }
+
+    function updatePhysics() {
+        if(!gameState.ball) return;
+
+        const b = gameState.ball;
+        b.vx += b.wind; // 저장된 바람 세기 적용
+        b.vy += GRAVITY;
+        b.x += b.vx;
+        b.y += b.vy;
+
+        const groundY = getTerrainY(b.x);
+        if(b.y > groundY || b.x < 0 || b.x > w) {
+            // 폭발 이펙트 (양쪽 동일 생성)
+            createExplosion(b.x, b.y, gameState.turn === 1 ? '#3b82f6' : '#ef4444');
+            
+            if(isHost) {
+                checkDamage(b.x, b.y);
+                gameState.ball = null;
+                gameState.turn = gameState.turn === 1 ? 2 : 1;
+                gameState.wind = (Math.random() - 0.5) * 0.4;
+                sendSync();
+            } else {
+                gameState.ball = null; // 게스트도 물리 정지 (호스트의 SYNC 대기)
             }
         }
     }
 
-    function checkHit(bx, by) {
-        const target = state.turn === 1 ? state.p2 : state.p1;
+    function checkDamage(bx, by) {
+        const target = gameState.turn === 1 ? gameState.p2 : gameState.p1;
         const dist = Math.sqrt((bx - target.x)**2 + (by - target.y)**2);
-        if(dist < TANK_SIZE + 10) {
-            target.hp = Math.max(0, target.hp - 35);
-            if(target.hp <= 0) state.gameOver = true;
+        if(dist < TANK_SIZE + 20) {
+            target.hp = Math.max(0, target.hp - 34);
+            if(target.hp <= 0) gameState.gameOver = true;
         }
     }
 
     function draw() {
         ctx.clearRect(0, 0, w, h);
         
-        // 1. 배경 그라데이션
-        let sky = ctx.createLinearGradient(0, 0, 0, h);
-        sky.addColorStop(0, '#0f172a'); sky.addColorStop(1, '#1e293b');
-        ctx.fillStyle = sky; ctx.fillRect(0, 0, w, h);
+        // 하늘
+        let grad = ctx.createLinearGradient(0,0,0,h);
+        grad.addColorStop(0, '#020617'); grad.addColorStop(1, '#1e293b');
+        ctx.fillStyle = grad; ctx.fillRect(0,0,w,h);
 
-        // 2. 지형 렌더링
-        ctx.beginPath();
-        ctx.moveTo(0, h);
-        state.terrain.forEach(p => ctx.lineTo(p.x, p.y));
-        ctx.lineTo(w, h);
-        let ground = ctx.createLinearGradient(0, h*0.5, 0, h);
-        ground.addColorStop(0, '#334155'); ground.addColorStop(1, '#0f172a');
-        ctx.fillStyle = ground; ctx.fill();
-        ctx.strokeStyle = '#475569'; ctx.lineWidth = 2; ctx.stroke();
+        // 지형
+        if(gameState.terrain.length > 0) {
+            ctx.beginPath();
+            ctx.moveTo(0, h);
+            gameState.terrain.forEach(p => ctx.lineTo(p.x, p.y));
+            ctx.lineTo(w, h);
+            ctx.fillStyle = '#0f172a'; ctx.fill();
+            ctx.strokeStyle = '#334155'; ctx.lineWidth = 3; ctx.stroke();
+        }
 
-        // 3. 탱크 렌더링
-        drawTank(state.p1, 1);
-        drawTank(state.p2, 2);
+        // 탱크
+        drawTank(gameState.p1, 1);
+        drawTank(gameState.p2, 2);
 
-        // 4. 포탄 렌더링
-        if(state.ball) {
-            ctx.fillStyle = 'white';
-            ctx.shadowBlur = 15; ctx.shadowColor = 'white';
-            ctx.beginPath(); ctx.arc(state.ball.x, state.ball.y, 5, 0, Math.PI*2); ctx.fill();
+        // 포탄
+        if(gameState.ball) {
+            ctx.fillStyle = '#fff';
+            ctx.shadowBlur = 15; ctx.shadowColor = '#fff';
+            ctx.beginPath(); ctx.arc(gameState.ball.x, gameState.ball.y, 6, 0, Math.PI*2); ctx.fill();
             ctx.shadowBlur = 0;
         }
 
-        // 5. 가이드라인 및 조준 UI
-        if(input.active && state.turn === (iAmP1 ? 1 : 2) && !state.ball) {
-            drawGuide();
+        // 궤적 가이드
+        if(aiming.active && gameState.turn === myNum && !gameState.ball) {
+            drawTrajectory();
         }
 
-        // 6. 파티클(폭발)
-        particles.forEach((p, i) => {
-            p.x += p.vx; p.y += p.vy; p.alpha -= 0.02;
-            ctx.fillStyle = p.color.replace(')', `, ${p.alpha})`).replace('rgb', 'rgba');
-            ctx.fillRect(p.x, p.y, p.size, p.size);
-            if(p.alpha <= 0) particles.splice(i, 1);
+        // 폭발 파티클
+        explosions.forEach((p, i) => {
+            p.x += p.vx; p.y += p.vy; p.a -= 0.02;
+            ctx.fillStyle = p.c.replace(')', `, ${p.a})`).replace('rgb', 'rgba');
+            ctx.fillRect(p.x, p.y, p.s, p.s);
+            if(p.a <= 0) explosions.splice(i, 1);
         });
     }
 
     function drawTank(p, num) {
         ctx.save();
         ctx.translate(p.x, p.y);
-        
+        ctx.fillStyle = num === 1 ? '#3b82f6' : '#ef4444';
         // 몸체
-        ctx.fillStyle = p.color;
-        ctx.beginPath(); ctx.roundRect(-20, -10, 40, 15, 5); ctx.fill();
+        ctx.beginPath(); ctx.roundRect(-22, -12, 44, 18, 6); ctx.fill();
         // 포탑
-        ctx.beginPath(); ctx.arc(0, -10, 10, Math.PI, 0); ctx.fill();
-        // 포신 (회전)
-        ctx.strokeStyle = p.color; ctx.lineWidth = 6; ctx.lineCap = 'round';
-        ctx.beginPath(); ctx.moveTo(0, -12);
-        let barrelLen = 25;
-        let ang = (num === 1) ? state.p1.angle : state.p2.angle;
-        if(!ang) ang = (num === 1 ? -0.5 : 3.6);
-        ctx.lineTo(Math.cos(ang) * barrelLen, Math.sin(ang) * barrelLen - 12);
+        ctx.beginPath(); ctx.arc(0, -12, 12, Math.PI, 0); ctx.fill();
+        // 포신
+        ctx.strokeStyle = num === 1 ? '#3b82f6' : '#ef4444'; ctx.lineWidth = 8; ctx.lineCap = 'round';
+        ctx.beginPath(); ctx.moveTo(0, -15);
+        ctx.lineTo(Math.cos(p.angle) * 30, Math.sin(p.angle) * 30 - 15);
         ctx.stroke();
-
         ctx.restore();
     }
 
-    function drawGuide() {
-        const p = iAmP1 ? state.p1 : state.p2;
-        const dx = input.startX - input.currX;
-        const dy = input.startY - input.currY;
+    function drawTrajectory() {
+        const p = myNum === 1 ? gameState.p1 : gameState.p2;
+        const dx = aiming.sx - aiming.cx, dy = aiming.sy - aiming.cy;
         const power = Math.min(Math.sqrt(dx*dx + dy*dy) * 0.15, 25);
         const angle = Math.atan2(dy, dx);
         
-        ctx.beginPath();
-        ctx.setLineDash([5, 5]);
-        ctx.strokeStyle = 'rgba(255,255,255,0.3)';
-        let tx = p.x, ty = p.y - 20, tvx = Math.cos(angle) * power, tvy = Math.sin(angle) * power;
-        for(let i=0; i<30; i++) {
+        ctx.beginPath(); ctx.setLineDash([6, 6]); ctx.strokeStyle = 'rgba(255,255,255,0.4)';
+        let tx = p.x, ty = p.y - 15, tvx = Math.cos(angle) * power, tvy = Math.sin(angle) * power;
+        for(let i=0; i<40; i++) {
             ctx.lineTo(tx, ty);
-            tvx += state.wind; tvy += GRAVITY; tx += tvx; ty += tvy;
+            tvx += gameState.wind; tvy += GRAVITY; tx += tvx; ty += tvy;
         }
-        ctx.stroke();
-        ctx.setLineDash([]);
+        ctx.stroke(); ctx.setLineDash([]);
     }
 
     function createExplosion(x, y, color) {
-        for(let i=0; i<20; i++) {
-            particles.push({
-                x, y, vx: (Math.random()-0.5)*10, vy: (Math.random()-0.5)*10,
-                size: Math.random()*5+2, alpha: 1, color: color === '#3b82f6' ? 'rgb(59, 130, 246)' : 'rgb(239, 68, 68)'
+        const rgb = color === '#3b82f6' ? 'rgb(59, 130, 246)' : 'rgb(239, 68, 68)';
+        for(let i=0; i<30; i++) {
+            explosions.push({
+                x, y, vx: (Math.random()-0.5)*12, vy: (Math.random()-0.5)*12,
+                s: Math.random()*6+2, a: 1, c: rgb
             });
         }
     }
 
-    // --- 입력 조작 ---
-    let input = { active: false, startX: 0, startY: 0, currX: 0, currY: 0 };
+    // --- 4. 조작 시스템 ---
+    let aiming = { active: false, sx: 0, sy: 0, cx: 0, cy: 0 };
     function setupInput() {
         canvas.addEventListener('pointerdown', e => {
-            if(state.turn !== (iAmP1 ? 1 : 2) || state.ball) return;
-            input.active = true;
-            input.startX = input.currX = e.clientX;
-            input.startY = input.currY = e.clientY;
+            if(gameState.turn !== myNum || gameState.ball || gameState.gameOver) return;
+            aiming.active = true;
+            aiming.sx = aiming.cx = e.clientX; aiming.sy = aiming.cy = e.clientY;
         });
         window.addEventListener('pointermove', e => {
-            if(!input.active) return;
-            input.currX = e.clientX; input.currY = e.clientY;
-            // 각도 실시간 업데이트 (포신 회전용)
-            const p = iAmP1 ? state.p1 : state.p2;
-            p.angle = Math.atan2(input.startY - input.currY, input.startX - input.currX);
+            if(!aiming.active) return;
+            aiming.cx = e.clientX; aiming.cy = e.clientY;
+            const p = myNum === 1 ? gameState.p1 : gameState.p2;
+            p.angle = Math.atan2(aiming.sy - aiming.cy, aiming.sx - aiming.cx);
         });
         window.addEventListener('pointerup', () => {
-            if(!input.active) return;
-            input.active = false;
-            const dx = input.startX - input.currX, dy = input.startY - input.currY;
+            if(!aiming.active) return;
+            aiming.active = false;
+            const dx = aiming.sx - aiming.cx, dy = aiming.sy - aiming.cy;
             const power = Math.min(Math.sqrt(dx*dx + dy*dy) * 0.15, 25);
-            if(power > 2) {
-                if(isHost) fire(state.p1.angle, power);
-                else conn.send({type: 'FIRE', angle: state.p2.angle, power});
+            const angle = Math.atan2(dy, dx);
+            if(power > 3) {
+                const fireData = {
+                    type: 'FIRE_EVENT',
+                    x: (myNum === 1 ? gameState.p1.x : gameState.p2.x),
+                    y: (myNum === 1 ? gameState.p1.y : gameState.p2.y) - 15,
+                    vx: Math.cos(angle) * power,
+                    vy: Math.sin(angle) * power,
+                    wind: gameState.wind
+                };
+                conn.send(fireData); // 상대에게 발사 정보 전송
+                gameState.ball = { x: fireData.x, y: fireData.y, vx: fireData.vx, vy: fireData.vy, wind: fireData.wind }; // 내 화면 시뮬레이션
             }
         });
     }
 
     function updateUI() {
-        document.getElementById('hp-p1').style.width = state.p1.hp + '%';
-        document.getElementById('hp-p2').style.width = state.p2.hp + '%';
-        document.getElementById('wind-text').innerText = `WIND: ${Math.abs(state.wind * 100).toFixed(0)}`;
-        document.getElementById('wind-arrow').style.transform = `rotate(${state.wind >= 0 ? 0 : 180}deg)`;
+        document.getElementById('hp-1').style.width = gameState.p1.hp + '%';
+        document.getElementById('hp-2').style.width = gameState.p2.hp + '%';
+        const wind = gameState.wind * 100;
+        document.getElementById('wind-display').innerText = `WIND: ${Math.abs(wind).toFixed(1)} ${wind >= 0 ? '→' : '←'}`;
         
-        const msg = document.getElementById('turn-msg');
-        const myTurn = state.turn === (iAmP1 ? 1 : 2);
+        const msg = document.getElementById('message');
+        const myTurn = gameState.turn === myNum;
         msg.innerText = myTurn ? "YOUR TURN" : "ENEMY TURN";
-        msg.style.color = myTurn ? 'var(--accent)' : 'white';
+        msg.style.color = myTurn ? 'var(--accent)' : '#fff';
         msg.classList.toggle('show', true);
-        if(state.gameOver) {
-            msg.innerText = (state.p1.hp > 0 ? "PLAYER 1" : "PLAYER 2") + " WINS!";
-            msg.style.color = 'white';
-        }
+        if(gameState.gameOver) msg.innerText = (gameState.p1.hp > 0 ? "BLUE" : "RED") + " WINS!";
     }
 </script>
 </body>
