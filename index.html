@@ -3,371 +3,344 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Core Artillery: Fully Loaded</title>
+    <title>Core Artillery: Ultimate</title>
     <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
     <style>
-        /* 디자인 테마 정의 */
         :root {
-            --sky-top: #87CEEB; --sky-bottom: #E0F6FF;
-            --ground-top: #228B22; --ground-bottom: #0B3D0B;
-            --p1-color: #0066FF; --p2-color: #FF3300;
-            --ui-bg: rgba(0,0,0,0.6);
+            --p1-color: #3b82f6; --p2-color: #ef4444;
+            --accent: #f59e0b; --bg-dark: #0f172a;
         }
-        body { margin: 0; overflow: hidden; background: linear-gradient(to bottom, var(--sky-top), var(--sky-bottom)); font-family: 'Arial Black', sans-serif; touch-action: none; }
+        body { margin: 0; overflow: hidden; background: var(--bg-dark); font-family: 'Segoe UI', system-ui, sans-serif; touch-action: none; color: white; }
         
-        /* 초대 및 UI 오버레이 */
-        #invite-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.85); z-index: 100; display: flex; flex-direction: column; align-items: center; justify-content: center; color: white; text-align: center; }
-        .btn-main { padding: 15px 40px; background: #FFD700; border: none; border-radius: 30px; font-weight: bold; font-size: 20px; cursor: pointer; color: #333; box-shadow: 0 5px 0 #DAA520; transition: 0.1s; }
-        .btn-main:active { transform: translateY(5px); box-shadow: none; }
+        /* 로딩 및 초대 화면 */
+        #overlay { position: fixed; inset: 0; background: radial-gradient(circle, #1e293b 0%, #000 100%); z-index: 100; display: flex; flex-direction: column; align-items: center; justify-content: center; transition: 0.5s; }
+        .card { background: rgba(255,255,255,0.05); padding: 40px; border-radius: 30px; border: 1px solid rgba(255,255,255,0.1); backdrop-filter: blur(10px); text-align: center; box-shadow: 0 20px 50px rgba(0,0,0,0.5); }
+        .btn { padding: 15px 40px; background: var(--accent); border: none; border-radius: 50px; font-weight: bold; font-size: 18px; cursor: pointer; color: #000; transition: 0.3s; box-shadow: 0 0 20px rgba(245,158,11,0.4); }
+        .btn:hover { transform: scale(1.05); background: #ffb833; }
+        .btn:disabled { background: #444; color: #888; box-shadow: none; cursor: wait; }
 
-        /* 게임 화면 UI */
-        #game-container { width: 100vw; height: 100vh; position: relative; display: none; }
-        canvas { display: block; }
+        /* 게임 UI */
+        #game-ui { position: absolute; inset: 0; pointer-events: none; display: none; }
+        .status-bar { position: absolute; top: 20px; width: 100%; display: flex; justify-content: space-around; padding: 0 20px; box-sizing: border-box; }
+        .hp-card { background: rgba(0,0,0,0.5); padding: 10px 20px; border-radius: 15px; border-bottom: 4px solid transparent; width: 180px; }
+        .hp-bg { width: 100%; height: 12px; background: #334155; border-radius: 6px; margin-top: 8px; overflow: hidden; }
+        .hp-fill { height: 100%; transition: width 0.5s cubic-bezier(0.17, 0.67, 0.83, 0.67); }
         
-        #ui-header { position: absolute; top: 0; left: 0; width: 100%; padding: 15px; box-sizing: border-box; display: flex; justify-content: space-between; pointer-events: none; }
-        .player-panel { background: var(--ui-bg); padding: 10px 20px; border-radius: 20px; color: white; text-shadow: 1px 1px 2px black; backdrop-filter: blur(5px); }
-        .hp-container { width: 150px; height: 18px; background: #333; border-radius: 10px; overflow: hidden; margin-top: 5px; border: 2px solid #555; }
-        .hp-bar { height: 100%; transition: width 0.4s ease-out; }
-        
-        #turn-banner { position: absolute; top: 100px; width: 100%; text-align: center; font-size: 28px; color: white; text-shadow: 2px 2px 8px rgba(0,0,0,0.8); pointer-events: none; transition: 0.3s; opacity: 0; }
-        #turn-banner.show { opacity: 1; top: 80px; }
-
-        /* 아이템 컨트롤 UI */
-        #item-controls { position: absolute; bottom: 30px; width: 100%; display: flex; justify-content: center; gap: 15px; pointer-events: none; }
-        .item-btn { width: 60px; height: 60px; background: var(--ui-bg); border-radius: 15px; border: 3px solid #fff; color: white; font-size: 24px; display: flex; align-items: center; justify-content: center; cursor: pointer; pointer-events: auto; position: relative; transition: 0.2s; opacity: 0.5; }
-        .item-btn.active { opacity: 1; transform: scale(1.1); border-color: #FFD700; background: rgba(255,215,0,0.3); }
-        .item-btn.used { opacity: 0.3; cursor: not-allowed; border-color: #555; }
-        .item-count { position: absolute; bottom: -5px; right: -5px; background: red; font-size: 12px; padding: 2px 6px; border-radius: 10px; border: 1px solid white; }
+        #wind-box { position: absolute; top: 20px; left: 50%; transform: translateX(-50%); text-align: center; background: rgba(0,0,0,0.3); padding: 5px 20px; border-radius: 20px; }
+        #turn-msg { position: absolute; top: 100px; width: 100%; text-align: center; font-size: 32px; font-weight: 900; text-transform: uppercase; letter-spacing: 2px; text-shadow: 0 0 20px rgba(255,255,255,0.5); opacity: 0; transition: 0.3s; }
+        #turn-msg.show { opacity: 1; transform: translateY(10px); }
     </style>
 </head>
 <body>
 
-<div id="invite-overlay">
-    <h1 style="font-size: 40px; margin-bottom: 10px; text-shadow: 0 0 20px #FFD700;">ARTILLERY DUEL<br><span style="font-size:24px; color:#FFD700">Fully Loaded</span></h1>
-    <p style="margin-bottom: 30px; color:#ccc;">드래그 조준 & 아이템 전략!</p>
-    <button id="invite-btn" class="btn-main" onclick="copyInvite()" disabled>링크 생성 중...</button>
+<div id="overlay">
+    <div class="card">
+        <h1 style="margin:0 0 10px 0; letter-spacing: -1px;">CANNON DUEL</h1>
+        <p style="color: #94a3b8; margin-bottom: 30px;">최고의 포격수를 가리는 대결</p>
+        <button id="invite-btn" class="btn" onclick="copyInvite()" disabled>초대 링크 생성 중...</button>
+    </div>
 </div>
 
-<div id="game-container">
-    <canvas id="gameCanvas"></canvas>
-    <div id="ui-header">
-        <div class="player-panel" style="border-left: 5px solid var(--p1-color)">
-            P1 (Blue)
-            <div class="hp-container"><div id="p1-hp" class="hp-bar" style="width:100%; background:var(--p1-color)"></div></div>
+<div id="game-ui">
+    <div class="status-bar">
+        <div class="hp-card" style="border-color: var(--p1-color)">
+            <span style="font-size:12px; color:#94a3b8">PLAYER 1</span>
+            <div class="hp-bg"><div id="hp-p1" class="hp-fill" style="width:100%; background:var(--p1-color)"></div></div>
         </div>
-        <div class="player-panel" style="border-right: 5px solid var(--p2-color); text-align: right;">
-            P2 (Red)
-            <div class="hp-container" style="justify-content: flex-end; display: flex;"><div id="p2-hp" class="hp-bar" style="width:100%; background:var(--p2-color)"></div></div>
+        <div id="wind-box">
+            <div id="wind-text" style="font-size:14px; font-weight:bold">WIND: 0</div>
+            <div id="wind-arrow" style="font-size:20px">→</div>
+        </div>
+        <div class="hp-card" style="border-color: var(--p2-color); text-align: right;">
+            <span style="font-size:12px; color:#94a3b8">PLAYER 2</span>
+            <div class="hp-bg"><div id="hp-p2" class="hp-fill" style="width:100%; background:var(--p2-color)"></div></div>
         </div>
     </div>
-    <div id="turn-banner">게임 시작 대기 중...</div>
-    
-    <div id="item-controls" style="display:none;">
-        <div class="item-btn" id="btn-double" onclick="useItem('double')">🔥<span class="item-count" id="cnt-double">1</span></div>
-        <div class="item-btn" id="btn-big" onclick="useItem('big')">💣<span class="item-count" id="cnt-big">1</span></div>
-        <div class="item-btn" id="btn-heal" onclick="useItem('heal')">❤️<span class="item-count" id="cnt-heal">1</span></div>
-    </div>
+    <div id="turn-msg">YOUR TURN</div>
 </div>
+
+<canvas id="gameCanvas"></canvas>
 
 <script>
-    // === 설정 및 상수 ===
+    // --- 설정 및 상수 ---
     const GRAVITY = 0.25;
-    const MAX_POWER = 30;
-    const TANK_SIZE = 30;
-    let canvas, ctx, width, height;
+    const TANK_SIZE = 35;
+    let canvas, ctx, w, h;
     let myId, conn, isHost = false, iAmP1 = false;
-    let animationId;
-    let explosions = []; // 폭발 이펙트 관리
+    let particles = [];
 
-    // === 게임 상태 ===
-    let gameState = {
+    // --- 게임 상태 ---
+    let state = {
         terrain: [],
-        p1: { x: 100, y: 0, hp: 100, color: '#0066FF', items: { double: 1, big: 1, heal: 1 } },
-        p2: { x: 0, y: 0, hp: 100, color: '#FF3300', items: { double: 1, big: 1, heal: 1 } },
+        p1: { x: 0, y: 0, hp: 100, color: '#3b82f6', angle: 0 },
+        p2: { x: 0, y: 0, hp: 100, color: '#ef4444', angle: 0 },
         turn: 1,
-        projectiles: [], // 다중 포탄 지원
-        activeItem: null, // 현재 턴에 활성화된 아이템
+        wind: 0,
+        ball: null,
         gameOver: false
     };
 
-    // === 1. 네트워크 및 초기화 ===
+    // --- 초기화 및 네트워크 ---
     const peer = new Peer(null, { config: {'iceServers': [{ url: 'stun:stun.l.google.com:19302' }]} });
+    
     peer.on('open', id => {
         myId = id;
         document.getElementById('invite-btn').disabled = false;
-        document.getElementById('invite-btn').innerText = "링크 복사 & 시작";
+        document.getElementById('invite-btn').innerText = "초대 링크 복사";
         if(window.location.hash) connectTo(window.location.hash.substring(1));
     });
+
     peer.on('connection', c => { conn = c; isHost = true; iAmP1 = true; setupConn(); });
 
     function copyInvite() {
-        navigator.clipboard.writeText(`${window.location.origin}${window.location.pathname}#${myId}`)
-        .then(() => alert("링크 복사 완료! 상대가 접속하면 게임이 시작됩니다."));
+        navigator.clipboard.writeText(`${window.location.origin}${window.location.pathname}#${myId}`);
+        alert("링크가 복사되었습니다! 상대에게 보내세요.");
     }
+
     function connectTo(tid) { conn = peer.connect(tid); isHost = false; iAmP1 = false; setupConn(); }
 
     function setupConn() {
         conn.on('open', () => {
-            document.getElementById('invite-overlay').style.display = 'none';
-            document.getElementById('game-container').style.display = 'block';
-            initCanvas(); setupInput();
-            if(isHost) initGameHost();
-            gameLoop();
+            document.getElementById('overlay').style.opacity = '0';
+            setTimeout(() => {
+                document.getElementById('overlay').style.display = 'none';
+                document.getElementById('game-ui').style.display = 'block';
+                initCanvas();
+                if(isHost) initGame();
+                requestAnimationFrame(loop);
+            }, 500);
         });
         conn.on('data', data => {
-            if(isHost && data.type === 'FIRE') { handleFireRequest(data.angle, data.power, data.item); }
-            else if(isHost && data.type === 'HEAL') { applyHeal(2); }
-            else if(!isHost && data.type === 'SYNC') { 
-                gameState = data.state; updateUI(); 
-                if(data.explosion) createExplosion(data.explosion.x, data.explosion.y, data.explosion.isBig);
-            }
+            if(data.type === 'SYNC') { state = data.state; updateUI(); }
+            if(data.type === 'FIRE' && isHost) fire(data.angle, data.power);
+            if(data.type === 'BOOM') createExplosion(data.x, data.y, data.color);
         });
     }
 
-    // === 2. 게임 로직 (호스트 중심) ===
     function initCanvas() {
         canvas = document.getElementById('gameCanvas');
         ctx = canvas.getContext('2d');
-        resize(); window.addEventListener('resize', resize);
+        resize();
+        window.addEventListener('resize', resize);
+        setupInput();
     }
-    function resize() { width = canvas.width = window.innerWidth; height = canvas.height = window.innerHeight; }
 
-    function initGameHost() {
-        gameState.terrain = [];
-        let h = height * 0.7;
-        for(let x=0; x<=width; x+=20) {
-            h += (Math.random() - 0.5) * 30; // 랜덤 지형
-            h = Math.max(height*0.4, Math.min(height*0.9, h)); // 높이 제한
-            gameState.terrain.push({x: x, y: h});
+    function resize() {
+        w = canvas.width = window.innerWidth;
+        h = canvas.height = window.innerHeight;
+        if(isHost && state.terrain.length === 0) initGame();
+    }
+
+    // --- 게임 로직 ---
+    function initGame() {
+        state.terrain = [];
+        let currH = h * 0.7;
+        for(let x = 0; x <= w + 40; x += 40) {
+            currH += (Math.random() - 0.5) * 100;
+            currH = Math.max(h * 0.4, Math.min(h * 0.85, currH));
+            state.terrain.push({x, y: currH});
         }
-        // 평탄화 작업
-        for(let i=1; i<gameState.terrain.length-1; i++) {
-            gameState.terrain[i].y = (gameState.terrain[i-1].y + gameState.terrain[i].y + gameState.terrain[i+1].y) / 3;
-        }
-        gameState.p1.y = getTerrainHeight(gameState.p1.x);
-        gameState.p2.x = width - 100; gameState.p2.y = getTerrainHeight(gameState.p2.x);
+        state.p1.x = w * 0.15; state.p1.y = getTerrainY(state.p1.x);
+        state.p2.x = w * 0.85; state.p2.y = getTerrainY(state.p2.x);
+        state.wind = (Math.random() - 0.5) * 0.3;
         sync();
     }
 
-    function getTerrainHeight(x) {
-        if(x < 0 || x > width) return height;
-        for(let i=0; i<gameState.terrain.length-1; i++) {
-            if(x >= gameState.terrain[i].x && x <= gameState.terrain[i+1].x) {
-                const t = (x - gameState.terrain[i].x) / (gameState.terrain[i+1].x - gameState.terrain[i].x);
-                return gameState.terrain[i].y * (1-t) + gameState.terrain[i+1].y * t; // 선형 보간
+    function getTerrainY(x) {
+        for(let i=0; i < state.terrain.length - 1; i++) {
+            if(x >= state.terrain[i].x && x <= state.terrain[i+1].x) {
+                let ratio = (x - state.terrain[i].x) / (state.terrain[i+1].x - state.terrain[i].x);
+                return state.terrain[i].y * (1 - ratio) + state.terrain[i+1].y * ratio;
             }
         }
-        return height;
+        return h;
     }
 
-    function handleFireRequest(angle, power, itemType) {
-        if(gameState.projectiles.length > 0 || gameState.gameOver) return;
-        
-        const shooterIdx = gameState.turn === 1 ? 'p1' : 'p2';
-        const shooter = gameState[shooterIdx];
-
-        // 아이템 사용 처리
-        let isBig = false;
-        let shotCount = 1;
-        if(itemType === 'big' && shooter.items.big > 0) { isBig = true; shooter.items.big--; }
-        else if(itemType === 'double' && shooter.items.double > 0) { shotCount = 2; shooter.items.double--; }
-        
-        gameState.activeItem = null; // 사용 후 초기화
-
-        for(let i=0; i<shotCount; i++) {
-            setTimeout(() => {
-                 gameState.projectiles.push({
-                    x: shooter.x, y: shooter.y - TANK_SIZE,
-                    vx: Math.cos(angle) * power, vy: Math.sin(angle) * power,
-                    radius: isBig ? 8 : 5, isBig: isBig, rotation: 0
-                });
-                if(isHost) sync();
-            }, i * 300); // 더블샷 딜레이
-        }
+    function fire(angle, power) {
+        if(state.ball || state.gameOver) return;
+        const p = state.turn === 1 ? state.p1 : state.p2;
+        state.ball = { x: p.x, y: p.y - 20, vx: Math.cos(angle) * power, vy: Math.sin(angle) * power };
+        sync();
     }
 
-    function applyHeal(playerNum) {
-        if(!isHost || gameState.gameOver) return;
-        const pStr = playerNum === 1 ? 'p1' : 'p2';
-        if(gameState[pStr].items.heal > 0) {
-            gameState[pStr].hp = Math.min(100, gameState[pStr].hp + 30);
-            gameState[pStr].items.heal--;
-            sync();
-        }
-    }
+    function sync() { if(isHost) conn.send({type: 'SYNC', state}); updateUI(); }
 
-    function updatePhysics() {
-        if(!isHost || gameState.gameOver) return;
-        
-        gameState.projectiles.forEach((p, idx) => {
-            p.vy += GRAVITY; p.x += p.vx; p.y += p.vy;
-            p.rotation += 0.1; // 포탄 회전
-
-            // 충돌 체크
-            const terrainH = getTerrainHeight(p.x);
-            if(p.y > terrainH || p.x < -100 || p.x > width + 100) {
-                createExplosion(p.x, p.y, p.isBig);
-                checkHit(p.x, p.y, p.isBig);
-                gameState.projectiles.splice(idx, 1);
-                sync({x:p.x, y:p.y, isBig:p.isBig}); // 폭발 정보 전송
-
-                // 모든 포탄이 터졌으면 턴 넘기기
-                if(gameState.projectiles.length === 0) {
-                    setTimeout(() => {
-                         if(!gameState.gameOver) {
-                            gameState.turn = gameState.turn === 1 ? 2 : 1;
-                            sync();
-                         }
-                    }, 1000);
-                }
-            }
-        });
-    }
-
-    function checkHit(x, y, isBig) {
-        const target = gameState.turn === 1 ? gameState.p2 : gameState.p1;
-        const dist = Math.sqrt((x-target.x)**2 + (y-target.y)**2);
-        const hitRadius = TANK_SIZE + (isBig ? 30 : 15);
-        const damage = isBig ? 50 : 30;
-
-        if(dist < hitRadius) {
-            target.hp = Math.max(0, target.hp - damage);
-            if(target.hp === 0) {
-                gameState.gameOver = true;
-                setTimeout(() => alert(`${gameState.turn === 1 ? 'P1' : 'P2'} Wins!`), 500);
-            }
-        }
-    }
-
-    function sync(explosionData = null) { if(isHost && conn) conn.send({type: 'SYNC', state: gameState, explosion: explosionData}); updateUI(); }
-
-    // === 3. 입력 및 렌더링 ===
-    let aiming = null;
-    function setupInput() {
-        canvas.addEventListener('pointerdown', e => {
-            if(gameState.gameOver || gameState.turn !== (iAmP1 ? 1 : 2) || gameState.projectiles.length > 0) return;
-            aiming = { startX: e.clientX, startY: e.clientY, currentX: e.clientX, currentY: e.clientY };
-        });
-        canvas.addEventListener('pointermove', e => { if(aiming) { aiming.currentX = e.clientX; aiming.currentY = e.clientY; }});
-        canvas.addEventListener('pointerup', e => {
-            if(!aiming) return;
-            const dx = aiming.startX - aiming.currentX, dy = aiming.startY - aiming.currentY;
-            const power = Math.min(Math.sqrt(dx*dx + dy*dy) / 8, MAX_POWER);
-            const angle = Math.atan2(dy, dx);
-            aiming = null;
-            if(power > 3) {
-                const item = gameState.activeItem;
-                if(isHost) handleFireRequest(angle, power, item);
-                else conn.send({type: 'FIRE', angle, power, item});
-            }
-        });
-    }
-
-    function useItem(type) {
-        const myP = iAmP1 ? gameState.p1 : gameState.p2;
-        if(gameState.turn !== (iAmP1 ? 1 : 2) || myP.items[type] === 0 || gameState.projectiles.length > 0) return;
-
-        if(type === 'heal') {
-            if(isHost) applyHeal(1); else conn.send({type:'HEAL'});
-        } else {
-            // 공격 아이템은 토글 방식
-            gameState.activeItem = (gameState.activeItem === type) ? null : type;
-            updateUI();
-        }
-    }
-
-    function createExplosion(x, y, isBig) {
-        explosions.push({x, y, radius: 0, maxRadius: isBig ? 60 : 40, alpha: 1});
-    }
-
-    function gameLoop() {
-        updatePhysics();
+    // --- 렌더링 엔진 ---
+    function loop() {
+        update();
         draw();
-        animationId = requestAnimationFrame(gameLoop);
+        requestAnimationFrame(loop);
+    }
+
+    function update() {
+        if(!isHost) return;
+        if(state.ball) {
+            state.ball.vx += state.wind;
+            state.ball.vy += GRAVITY;
+            state.ball.x += state.ball.vx;
+            state.ball.y += state.ball.vy;
+
+            let groundY = getTerrainY(state.ball.x);
+            if(state.ball.y > groundY || state.ball.x < 0 || state.ball.x > w) {
+                // 충돌 판정
+                checkHit(state.ball.x, state.ball.y);
+                const boomData = {type: 'BOOM', x: state.ball.x, y: state.ball.y, color: state.turn === 1 ? state.p1.color : state.p2.color};
+                createExplosion(boomData.x, boomData.y, boomData.color);
+                conn.send(boomData);
+                
+                state.ball = null;
+                state.turn = state.turn === 1 ? 2 : 1;
+                state.wind = (Math.random() - 0.5) * 0.3;
+                sync();
+            }
+        }
+    }
+
+    function checkHit(bx, by) {
+        const target = state.turn === 1 ? state.p2 : state.p1;
+        const dist = Math.sqrt((bx - target.x)**2 + (by - target.y)**2);
+        if(dist < TANK_SIZE + 10) {
+            target.hp = Math.max(0, target.hp - 35);
+            if(target.hp <= 0) state.gameOver = true;
+        }
     }
 
     function draw() {
-        ctx.clearRect(0, 0, width, height);
+        ctx.clearRect(0, 0, w, h);
         
-        // 지형 그리기 (텍스처 느낌)
-        const gradient = ctx.createLinearGradient(0, height*0.5, 0, height);
-        gradient.addColorStop(0, 'var(--ground-top)'); gradient.addColorStop(1, 'var(--ground-bottom)');
-        ctx.fillStyle = gradient;
-        ctx.beginPath(); ctx.moveTo(0, height);
-        gameState.terrain.forEach(p => ctx.lineTo(p.x, p.y));
-        ctx.lineTo(width, height); ctx.fill();
-        // 지형 테두리
-        ctx.strokeStyle = '#1a472a'; ctx.lineWidth = 3; ctx.beginPath();
-        gameState.terrain.forEach((p,i) => i===0 ? ctx.moveTo(p.x,p.y) : ctx.lineTo(p.x,p.y)); ctx.stroke();
+        // 1. 배경 그라데이션
+        let sky = ctx.createLinearGradient(0, 0, 0, h);
+        sky.addColorStop(0, '#0f172a'); sky.addColorStop(1, '#1e293b');
+        ctx.fillStyle = sky; ctx.fillRect(0, 0, w, h);
 
-        drawTank(gameState.p1); drawTank(gameState.p2);
+        // 2. 지형 렌더링
+        ctx.beginPath();
+        ctx.moveTo(0, h);
+        state.terrain.forEach(p => ctx.lineTo(p.x, p.y));
+        ctx.lineTo(w, h);
+        let ground = ctx.createLinearGradient(0, h*0.5, 0, h);
+        ground.addColorStop(0, '#334155'); ground.addColorStop(1, '#0f172a');
+        ctx.fillStyle = ground; ctx.fill();
+        ctx.strokeStyle = '#475569'; ctx.lineWidth = 2; ctx.stroke();
 
-        // 포탄 그리기
-        gameState.projectiles.forEach(p => {
-            ctx.save(); ctx.translate(p.x, p.y); ctx.rotate(p.rotation);
-            ctx.fillStyle = p.isBig ? '#FF4500' : '#333';
-            ctx.beginPath(); 
-            if(p.isBig) { ctx.arc(0, 0, p.radius, 0, Math.PI*2); ctx.fill(); ctx.strokeStyle='yellow'; ctx.lineWidth=2; ctx.stroke(); }
-            else { ctx.fillRect(-p.radius, -p.radius/2, p.radius*2, p.radius); } // 간단한 미사일 모양
-            ctx.restore();
-        });
+        // 3. 탱크 렌더링
+        drawTank(state.p1, 1);
+        drawTank(state.p2, 2);
 
-        // 조준선
-        if(aiming && gameState.turn === (iAmP1 ? 1 : 2)) {
-            const me = iAmP1 ? gameState.p1 : gameState.p2;
-            ctx.strokeStyle = 'rgba(255, 255, 255, 0.6)'; ctx.lineWidth = 4; ctx.setLineDash([8, 6]);
-            ctx.beginPath(); ctx.moveTo(me.x, me.y - TANK_SIZE*0.8);
-            ctx.lineTo(me.x + (aiming.startX - aiming.currentX), me.y - TANK_SIZE*0.8 + (aiming.startY - aiming.currentY));
-            ctx.stroke(); ctx.setLineDash([]);
+        // 4. 포탄 렌더링
+        if(state.ball) {
+            ctx.fillStyle = 'white';
+            ctx.shadowBlur = 15; ctx.shadowColor = 'white';
+            ctx.beginPath(); ctx.arc(state.ball.x, state.ball.y, 5, 0, Math.PI*2); ctx.fill();
+            ctx.shadowBlur = 0;
         }
 
-        // 폭발 이펙트
-        explosions.forEach((e, i) => {
-            ctx.fillStyle = `rgba(255, 69, 0, ${e.alpha})`;
-            ctx.beginPath(); ctx.arc(e.x, e.y, e.radius, 0, Math.PI*2); ctx.fill();
-            e.radius += 2; e.alpha -= 0.02;
-            if(e.alpha <= 0) explosions.splice(i, 1);
+        // 5. 가이드라인 및 조준 UI
+        if(input.active && state.turn === (iAmP1 ? 1 : 2) && !state.ball) {
+            drawGuide();
+        }
+
+        // 6. 파티클(폭발)
+        particles.forEach((p, i) => {
+            p.x += p.vx; p.y += p.vy; p.alpha -= 0.02;
+            ctx.fillStyle = p.color.replace(')', `, ${p.alpha})`).replace('rgb', 'rgba');
+            ctx.fillRect(p.x, p.y, p.size, p.size);
+            if(p.alpha <= 0) particles.splice(i, 1);
         });
     }
 
-    function drawTank(p) {
-        ctx.save(); ctx.translate(p.x, p.y);
-        ctx.fillStyle = p.color; ctx.strokeStyle = '#222'; ctx.lineWidth = 2;
+    function drawTank(p, num) {
+        ctx.save();
+        ctx.translate(p.x, p.y);
+        
         // 몸체
-        ctx.beginPath(); ctx.roundRect(-20, -15, 40, 20, 5); ctx.fill(); ctx.stroke();
-        // 궤도
-        ctx.fillStyle = '#333'; ctx.beginPath(); ctx.roundRect(-22, 0, 44, 10, 3); ctx.fill();
+        ctx.fillStyle = p.color;
+        ctx.beginPath(); ctx.roundRect(-20, -10, 40, 15, 5); ctx.fill();
         // 포탑
-        ctx.fillStyle = p.color; ctx.beginPath(); ctx.arc(0, -15, 12, Math.PI, 0); ctx.fill(); ctx.stroke();
-        // 포신 (방향은 고정)
-        ctx.lineWidth = 6; ctx.beginPath(); ctx.moveTo(0, -20); ctx.lineTo(p === gameState.p1 ? 20 : -20, -25); ctx.stroke();
+        ctx.beginPath(); ctx.arc(0, -10, 10, Math.PI, 0); ctx.fill();
+        // 포신 (회전)
+        ctx.strokeStyle = p.color; ctx.lineWidth = 6; ctx.lineCap = 'round';
+        ctx.beginPath(); ctx.moveTo(0, -12);
+        let barrelLen = 25;
+        let ang = (num === 1) ? state.p1.angle : state.p2.angle;
+        if(!ang) ang = (num === 1 ? -0.5 : 3.6);
+        ctx.lineTo(Math.cos(ang) * barrelLen, Math.sin(ang) * barrelLen - 12);
+        ctx.stroke();
+
         ctx.restore();
     }
 
-    function updateUI() {
-        document.getElementById('p1-hp').style.width = gameState.p1.hp + '%';
-        document.getElementById('p2-hp').style.width = gameState.p2.hp + '%';
+    function drawGuide() {
+        const p = iAmP1 ? state.p1 : state.p2;
+        const dx = input.startX - input.currX;
+        const dy = input.startY - input.currY;
+        const power = Math.min(Math.sqrt(dx*dx + dy*dy) * 0.15, 25);
+        const angle = Math.atan2(dy, dx);
         
-        const turnBanner = document.getElementById('turn-banner');
-        const myTurn = gameState.turn === (iAmP1 ? 1 : 2);
-        turnBanner.innerText = myTurn ? "당신의 차례!" : (gameState.turn === 1 ? "Blue 차례" : "Red 차례");
-        turnBanner.classList.add('show');
-        turnBanner.style.color = myTurn ? '#FFD700' : 'white';
+        ctx.beginPath();
+        ctx.setLineDash([5, 5]);
+        ctx.strokeStyle = 'rgba(255,255,255,0.3)';
+        let tx = p.x, ty = p.y - 20, tvx = Math.cos(angle) * power, tvy = Math.sin(angle) * power;
+        for(let i=0; i<30; i++) {
+            ctx.lineTo(tx, ty);
+            tvx += state.wind; tvy += GRAVITY; tx += tvx; ty += tvy;
+        }
+        ctx.stroke();
+        ctx.setLineDash([]);
+    }
 
-        document.getElementById('item-controls').style.display = myTurn ? 'flex' : 'none';
-        if(myTurn) {
-            const myItems = iAmP1 ? gameState.p1.items : gameState.p2.items;
-            updateItemBtn('double', myItems.double, '🔥');
-            updateItemBtn('big', myItems.big, '💣');
-            updateItemBtn('heal', myItems.heal, '❤️');
+    function createExplosion(x, y, color) {
+        for(let i=0; i<20; i++) {
+            particles.push({
+                x, y, vx: (Math.random()-0.5)*10, vy: (Math.random()-0.5)*10,
+                size: Math.random()*5+2, alpha: 1, color: color === '#3b82f6' ? 'rgb(59, 130, 246)' : 'rgb(239, 68, 68)'
+            });
         }
     }
 
-    function updateItemBtn(type, count, icon) {
-        const btn = document.getElementById(`btn-${type}`);
-        document.getElementById(`cnt-${type}`).innerText = count;
-        if(count === 0) { btn.classList.add('used'); btn.classList.remove('active'); }
-        else { btn.classList.remove('used'); btn.classList.toggle('active', gameState.activeItem === type); }
+    // --- 입력 조작 ---
+    let input = { active: false, startX: 0, startY: 0, currX: 0, currY: 0 };
+    function setupInput() {
+        canvas.addEventListener('pointerdown', e => {
+            if(state.turn !== (iAmP1 ? 1 : 2) || state.ball) return;
+            input.active = true;
+            input.startX = input.currX = e.clientX;
+            input.startY = input.currY = e.clientY;
+        });
+        window.addEventListener('pointermove', e => {
+            if(!input.active) return;
+            input.currX = e.clientX; input.currY = e.clientY;
+            // 각도 실시간 업데이트 (포신 회전용)
+            const p = iAmP1 ? state.p1 : state.p2;
+            p.angle = Math.atan2(input.startY - input.currY, input.startX - input.currX);
+        });
+        window.addEventListener('pointerup', () => {
+            if(!input.active) return;
+            input.active = false;
+            const dx = input.startX - input.currX, dy = input.startY - input.currY;
+            const power = Math.min(Math.sqrt(dx*dx + dy*dy) * 0.15, 25);
+            if(power > 2) {
+                if(isHost) fire(state.p1.angle, power);
+                else conn.send({type: 'FIRE', angle: state.p2.angle, power});
+            }
+        });
+    }
+
+    function updateUI() {
+        document.getElementById('hp-p1').style.width = state.p1.hp + '%';
+        document.getElementById('hp-p2').style.width = state.p2.hp + '%';
+        document.getElementById('wind-text').innerText = `WIND: ${Math.abs(state.wind * 100).toFixed(0)}`;
+        document.getElementById('wind-arrow').style.transform = `rotate(${state.wind >= 0 ? 0 : 180}deg)`;
+        
+        const msg = document.getElementById('turn-msg');
+        const myTurn = state.turn === (iAmP1 ? 1 : 2);
+        msg.innerText = myTurn ? "YOUR TURN" : "ENEMY TURN";
+        msg.style.color = myTurn ? 'var(--accent)' : 'white';
+        msg.classList.toggle('show', true);
+        if(state.gameOver) {
+            msg.innerText = (state.p1.hp > 0 ? "PLAYER 1" : "PLAYER 2") + " WINS!";
+            msg.style.color = 'white';
+        }
     }
 </script>
 </body>
