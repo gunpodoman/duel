@@ -1,12 +1,12 @@
-// --- 설정 및 상수 ---
+// --- [1] 전역 설정 및 상태 ---
 const GRAVITY = 0.25;
 const TANK_SIZE = 35;
-const HIT_RADIUS = 30; 
-const MAX_RETRIES = 5;
+const HIT_RADIUS = 30;
+const PING_INTERVAL = 5000; // 5초마다 연결 확인
 
 let canvas, ctx, w, h, myId, conn, isHost = false, myNum = 0;
-let retryCount = 0;
 let particles = [];
+let heartbeatTimer;
 
 let state = {
     terrain: [],
@@ -15,103 +15,155 @@ let state = {
     turn: 1, wind: 0, ball: null, gameOver: false, winner: 0
 };
 
-// --- 1. 강화된 네트워크 시스템 설정 ---
+// --- [2] 초정밀 네트워크 엔진 설정 ---
 const peerConfig = {
     config: {
         'iceServers': [
             { url: 'stun:stun.l.google.com:19302' },
             { url: 'stun:stun1.l.google.com:19302' },
             { url: 'stun:stun2.l.google.com:19302' },
+            { url: 'stun:stun3.l.google.com:19302' },
+            { url: 'stun:stun4.l.google.com:19302' },
+            { url: 'stun:global.stun.twilio.com:3478' }, // 트윌리오 글로벌 서버 추가
             {
                 urls: 'turn:openrelay.metered.ca:443',
-                username: 'openrelayproject',
-                credential: 'openrelayproject'
-            },
-            {
-                urls: 'turn:openrelay.metered.ca:80',
                 username: 'openrelayproject',
                 credential: 'openrelayproject'
             }
         ],
         iceCandidatePoolSize: 10,
+        sdpSemantics: 'unified-plan'
     },
-    debug: 1 
+    debug: 1
 };
 
 const peer = new Peer(null, peerConfig);
 
+// 피어 서버 연결 시
 peer.on('open', id => {
     myId = id;
     const btn = document.getElementById('invite-btn');
     btn.disabled = false;
-    btn.innerText = "링크 복사 및 대기";
+    btn.innerText = "초대 링크 복사 및 대기";
+    updateStatus("서버 준비 완료. 상대를 기다리세요.");
+    
     if(window.location.hash) {
-        connectWithRetry(window.location.hash.substring(1));
+        initiateConnection(window.location.hash.substring(1));
     }
 });
 
-function connectWithRetry(targetId) {
-    if (retryCount >= MAX_RETRIES) {
-        document.getElementById('status').innerText = "연결 실패. 새로고침 해주세요.";
+// 호스트: 게스트의 연결을 수락
+peer.on('connection', c => {
+    if (conn) { // 이미 연결된 경우 새 연결 차단
+        c.close();
         return;
     }
-    document.getElementById('status').innerText = `연결 시도 중... (${retryCount + 1}/${MAX_RETRIES})`;
-    
-    conn = peer.connect(targetId, { reliable: true, connectionPriority: 'high' });
-    isHost = false; myNum = 2;
-    
-    const timeout = setTimeout(() => {
-        if (!conn.open) {
-            retryCount++;
-            connectWithRetry(targetId);
-        }
-    }, 10000);
+    conn = c;
+    isHost = true;
+    myNum = 1;
+    bindConnectionEvents();
+});
 
+// 게스트: 호스트에게 연결 시도
+function initiateConnection(targetId) {
+    updateStatus("상대방과 경로 탐색 중...");
+    conn = peer.connect(targetId, {
+        reliable: true,
+        serialization: 'json'
+    });
+    isHost = false;
+    myNum = 2;
+    bindConnectionEvents();
+}
+
+// 공통: 연결 이벤트 바인딩
+function bindConnectionEvents() {
     conn.on('open', () => {
-        clearTimeout(timeout);
-        setupConnectionEvents();
+        updateStatus("연결 성공! 게임 데이터를 동기화합니다.");
+        startHeartbeat();
+        
+        // 화면 전환
+        document.getElementById('overlay').style.display = 'none';
+        document.getElementById('game-ui').style.display = 'block';
+        
+        initCanvas();
+        if(isHost) {
+            createTerrain();
+            setTimeout(sync, 300); // 안정적인 첫 동기화
+        }
+        requestAnimationFrame(loop);
+    });
+
+    conn.on('data', data => {
+        handleIncomingData(data);
+    });
+
+    conn.on('close', () => {
+        handleDisconnect();
+    });
+
+    conn.on('error', err => {
+        console.error("연결 오류:", err);
+        handleDisconnect();
     });
 }
 
-peer.on('connection', c => {
-    conn = c; isHost = true; myNum = 1;
-    setupConnectionEvents();
-});
+// 데이터 수신 처리 (성능 최적화 스위치)
+function handleIncomingData(data) {
+    switch(data.type) {
+        case 'SYNC':
+            state = data.state;
+            updateUI();
+            break;
+        case 'FIRE':
+            state.ball = { ...data.payload };
+            break;
+        case 'PONG':
+            // 하트비트 응답 (필요 시 레이턴시 계산 가능)
+            break;
+    }
+}
 
-function setupConnectionEvents() {
-    document.getElementById('overlay').style.display = 'none';
-    document.getElementById('game-ui').style.display = 'block';
-    initCanvas();
-    if(isHost) { createTerrain(); sync(); }
-    requestAnimationFrame(loop);
-
-    conn.on('data', data => {
-        if(data.type === 'SYNC') { state = data.state; updateUI(); }
-        if(data.type === 'FIRE') {
-            state.ball = { x: data.x, y: data.y, vx: data.vx, vy: data.vy, wind: data.wind };
+// 하트비트 시작 (연결 유지 기능)
+function startHeartbeat() {
+    heartbeatTimer = setInterval(() => {
+        if (conn && conn.open) {
+            conn.send({ type: 'PING', ts: Date.now() });
         }
-    });
-    conn.on('close', () => { alert("연결이 끊어졌습니다."); location.reload(); });
+    }, PING_INTERVAL);
+}
+
+function handleDisconnect() {
+    clearInterval(heartbeatTimer);
+    alert("연결이 끊어졌습니다. 메인 화면으로 돌아갑니다.");
+    window.location.hash = "";
+    window.location.reload();
+}
+
+function updateStatus(msg) {
+    document.getElementById('status').innerText = msg;
 }
 
 function copyLink() {
     const url = `${window.location.origin}${window.location.pathname}#${myId}`;
     navigator.clipboard.writeText(url).then(() => {
-        document.getElementById('status').innerText = "링크 복사 완료! 상대를 기다리세요.";
+        updateStatus("링크가 복사되었습니다! 친구에게 보내세요.");
     });
 }
 
-// --- 2. 게임 코어 엔진 ---
+// --- [3] 게임 로직 (기능 유지) ---
+
 function initCanvas() {
     canvas = document.getElementById('gameCanvas');
     ctx = canvas.getContext('2d');
-    resize(); window.addEventListener('resize', resize);
+    resize();
+    window.addEventListener('resize', resize);
     setupInput();
 }
 
-function resize() { 
-    w = canvas.width = window.innerWidth; 
-    h = canvas.height = window.innerHeight; 
+function resize() {
+    w = canvas.width = window.innerWidth;
+    h = canvas.height = window.innerHeight;
 }
 
 function createTerrain() {
@@ -135,6 +187,13 @@ function getTerrainY(x) {
         }
     }
     return h;
+}
+
+function sync() {
+    if(isHost && conn && conn.open) {
+        conn.send({ type: 'SYNC', state: state });
+        updateUI();
+    }
 }
 
 function loop() {
@@ -170,7 +229,7 @@ function update() {
     }
 }
 
-function sync() { if(isHost && conn) conn.send({type: 'SYNC', state}); updateUI(); }
+// --- [4] 렌더링 및 입력 (기능 유지) ---
 
 function draw() {
     ctx.clearRect(0,0,w,h);
@@ -230,7 +289,6 @@ function createBoom(x, y, color) {
     }
 }
 
-// --- 3. 입력 시스템 ---
 let input = { active:false, sx:0, sy:0, cx:0, cy:0 };
 function setupInput() {
     canvas.addEventListener('pointerdown', e => {
@@ -249,9 +307,10 @@ function setupInput() {
         const dx = input.sx - input.cx, dy = input.sy - input.cy;
         const pwr = Math.min(Math.sqrt(dx*dx+dy*dy)*0.15, 25);
         const ang = Math.atan2(dy, dx);
-        if(pwr > 3) {
-            const f = { type:'FIRE', x:(myNum===1?state.p1.x:state.p2.x), y:(myNum===1?state.p1.y:state.p2.y)-15, vx:Math.cos(ang)*pwr, vy:Math.sin(ang)*pwr, wind:state.wind };
-            conn.send(f); state.ball = { ...f };
+        if(pwr > 3 && conn && conn.open) {
+            const firePayload = { x:(myNum===1?state.p1.x:state.p2.x), y:(myNum===1?state.p1.y:state.p2.y)-15, vx:Math.cos(ang)*pwr, vy:Math.sin(ang)*pwr, wind:state.wind };
+            conn.send({ type: 'FIRE', payload: firePayload });
+            state.ball = { ...firePayload };
         }
     });
 }
