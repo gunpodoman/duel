@@ -1,8 +1,8 @@
 // --- [1] 전역 설정 및 상태 ---
 const GRAVITY = 0.25;
 const TANK_SIZE = 35;
-const HIT_RADIUS = 30;
-const PING_INTERVAL = 5000; // 5초마다 연결 확인
+const HIT_RADIUS = 30; 
+const PING_INTERVAL = 5000;
 
 let canvas, ctx, w, h, myId, conn, isHost = false, myNum = 0;
 let particles = [];
@@ -15,100 +15,79 @@ let state = {
     turn: 1, wind: 0, ball: null, gameOver: false, winner: 0
 };
 
-// --- [2] 초정밀 네트워크 엔진 설정 ---
+// --- [2] 네트워크 엔진 (버그 수정판) ---
 const peerConfig = {
     config: {
         'iceServers': [
             { url: 'stun:stun.l.google.com:19302' },
             { url: 'stun:stun1.l.google.com:19302' },
-            { url: 'stun:stun2.l.google.com:19302' },
-            { url: 'stun:stun3.l.google.com:19302' },
-            { url: 'stun:stun4.l.google.com:19302' },
-            { url: 'stun:global.stun.twilio.com:3478' }, // 트윌리오 글로벌 서버 추가
+            { url: 'stun:global.stun.twilio.com:3478' },
             {
                 urls: 'turn:openrelay.metered.ca:443',
                 username: 'openrelayproject',
                 credential: 'openrelayproject'
             }
         ],
-        iceCandidatePoolSize: 10,
-        sdpSemantics: 'unified-plan'
-    },
-    debug: 1
+        iceCandidatePoolSize: 10
+    }
 };
 
 const peer = new Peer(null, peerConfig);
 
-// 피어 서버 연결 시
 peer.on('open', id => {
     myId = id;
     const btn = document.getElementById('invite-btn');
     btn.disabled = false;
     btn.innerText = "초대 링크 복사 및 대기";
-    updateStatus("서버 준비 완료. 상대를 기다리세요.");
-    
     if(window.location.hash) {
         initiateConnection(window.location.hash.substring(1));
     }
 });
 
-// 호스트: 게스트의 연결을 수락
 peer.on('connection', c => {
-    if (conn) { // 이미 연결된 경우 새 연결 차단
-        c.close();
-        return;
-    }
+    if (conn) { c.close(); return; }
     conn = c;
     isHost = true;
     myNum = 1;
     bindConnectionEvents();
 });
 
-// 게스트: 호스트에게 연결 시도
 function initiateConnection(targetId) {
-    updateStatus("상대방과 경로 탐색 중...");
-    conn = peer.connect(targetId, {
-        reliable: true,
-        serialization: 'json'
-    });
+    conn = peer.connect(targetId, { reliable: true });
     isHost = false;
     myNum = 2;
     bindConnectionEvents();
 }
 
-// 공통: 연결 이벤트 바인딩
 function bindConnectionEvents() {
     conn.on('open', () => {
-        updateStatus("연결 성공! 게임 데이터를 동기화합니다.");
         startHeartbeat();
-        
-        // 화면 전환
         document.getElementById('overlay').style.display = 'none';
         document.getElementById('game-ui').style.display = 'block';
-        
         initCanvas();
+        
         if(isHost) {
             createTerrain();
-            setTimeout(sync, 300); // 안정적인 첫 동기화
+            // 호스트는 지형을 만들고 대기합니다.
+        } else {
+            // [수정] 게스트가 접속 성공 시 호스트에게 데이터를 요청합니다.
+            conn.send({ type: 'GUEST_READY' });
         }
         requestAnimationFrame(loop);
     });
 
     conn.on('data', data => {
+        if(data.type === 'GUEST_READY' && isHost) {
+            // [수정] 게스트의 준비 신호를 받으면 즉시 맵 정보를 보냅니다.
+            sync();
+        }
         handleIncomingData(data);
     });
 
-    conn.on('close', () => {
-        handleDisconnect();
-    });
-
-    conn.on('error', err => {
-        console.error("연결 오류:", err);
-        handleDisconnect();
-    });
+    conn.on('close', handleDisconnect);
+    conn.on('error', handleDisconnect);
 }
 
-// 데이터 수신 처리 (성능 최적화 스위치)
 function handleIncomingData(data) {
     switch(data.type) {
         case 'SYNC':
@@ -118,40 +97,32 @@ function handleIncomingData(data) {
         case 'FIRE':
             state.ball = { ...data.payload };
             break;
-        case 'PONG':
-            // 하트비트 응답 (필요 시 레이턴시 계산 가능)
+        case 'PING':
+            if(conn && conn.open) conn.send({ type: 'PONG' });
             break;
     }
 }
 
-// 하트비트 시작 (연결 유지 기능)
 function startHeartbeat() {
     heartbeatTimer = setInterval(() => {
-        if (conn && conn.open) {
-            conn.send({ type: 'PING', ts: Date.now() });
-        }
+        if (conn && conn.open) conn.send({ type: 'PING' });
     }, PING_INTERVAL);
 }
 
 function handleDisconnect() {
     clearInterval(heartbeatTimer);
-    alert("연결이 끊어졌습니다. 메인 화면으로 돌아갑니다.");
-    window.location.hash = "";
-    window.location.reload();
-}
-
-function updateStatus(msg) {
-    document.getElementById('status').innerText = msg;
+    alert("연결이 끊어졌습니다.");
+    window.location.href = window.location.pathname;
 }
 
 function copyLink() {
     const url = `${window.location.origin}${window.location.pathname}#${myId}`;
     navigator.clipboard.writeText(url).then(() => {
-        updateStatus("링크가 복사되었습니다! 친구에게 보내세요.");
+        document.getElementById('status').innerText = "링크가 복사되었습니다!";
     });
 }
 
-// --- [3] 게임 로직 (기능 유지) ---
+// --- [3] 게임 물리 및 로직 (턴 버그 수정) ---
 
 function initCanvas() {
     canvas = document.getElementById('gameCanvas');
@@ -197,13 +168,14 @@ function sync() {
 }
 
 function loop() {
-    update();
+    updatePhysics();
     draw();
     requestAnimationFrame(loop);
 }
 
-function update() {
+function updatePhysics() {
     if(!state.ball || state.gameOver) return;
+
     const b = state.ball;
     b.vx += b.wind; b.vy += GRAVITY; b.x += b.vx; b.y += b.vy;
 
@@ -212,24 +184,37 @@ function update() {
     const distToTarget = Math.sqrt((b.x - target.x)**2 + (b.y - (target.y - 15))**2);
     const groundY = getTerrainY(b.x);
     
+    // [수정] 충돌 발생 시 로직
     if(distToTarget < HIT_RADIUS || b.y > groundY || b.x < 0 || b.x > w) {
         createBoom(b.x, b.y, state.turn === 1 ? '#3b82f6' : '#ef4444');
+        
+        // 중요: 물리 시뮬레이션은 각자 멈추지만, 데이터 처리는 호스트가 주도
         if(isHost) {
             if(distToTarget < HIT_RADIUS + 10) {
                 target.hp = Math.max(0, target.hp - 34);
-                if(target.hp <= 0) { state.gameOver = true; state.winner = state.turn; }
+                if(target.hp <= 0) { 
+                    state.gameOver = true; 
+                    state.winner = state.turn; 
+                }
             }
-            state.ball = null;
+            
+            state.ball = null; // 포탄 제거
+
             if(!state.gameOver) {
-                state.turn = state.turn === 1 ? 2 : 1;
-                state.wind = (Math.random() - 0.5) * 0.4;
+                state.turn = state.turn === 1 ? 2 : 1; // 턴 교체
+                state.wind = (Math.random() - 0.5) * 0.4; // 바람 변경
             }
+            
+            // 변경된 모든 상태를 즉시 게스트에게 전송 (턴 전환의 핵심)
             sync();
-        } else { state.ball = null; }
+        } else {
+            // 게스트는 포탄만 일단 지우고 호스트의 SYNC를 기다립니다.
+            state.ball = null;
+        }
     }
 }
 
-// --- [4] 렌더링 및 입력 (기능 유지) ---
+// --- [4] 그래픽 및 조작 (기능 유지) ---
 
 function draw() {
     ctx.clearRect(0,0,w,h);
