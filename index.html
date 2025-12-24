@@ -3,235 +3,256 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Core Duel: Tactics</title>
+    <title>Core Artillery Duel</title>
     <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
     <style>
-        :root { --bg: #0f172a; --card-atk: #ef4444; --card-def: #3b82f6; --card-sup: #10b981; --text: #f8fafc; }
-        body { background: var(--bg); color: var(--text); font-family: 'Pretendard', sans-serif; margin: 0; overflow: hidden; user-select: none; }
+        :root { --bg: #87CEEB; --ground: #228B22; --p1: #0000FF; --p2: #FF0000; }
+        body { margin: 0; overflow: hidden; background: var(--bg); font-family: 'Arial Black', sans-serif; touch-action: none; }
         
-        #game-ui { display: flex; flex-direction: column; height: 100vh; padding: 10px; }
-        #header { display: flex; justify-content: space-between; padding: 10px; background: rgba(255,255,255,0.05); border-radius: 10px; }
+        /* 초대 및 UI 오버레이 */
+        #invite-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.8); z-index: 100; display: flex; flex-direction: column; align-items: center; justify-content: center; color: white; }
+        .btn { padding: 15px 30px; background: #FFD700; border: none; border-radius: 10px; font-weight: bold; font-size: 18px; cursor: pointer; color: #000; box-shadow: 0 4px 0 #DAA520; }
+        .btn:active { transform: translateY(4px); box-shadow: none; }
+
+        /* 게임 화면 */
+        #game-container { width: 100vw; height: 100vh; position: relative; display: none; }
+        canvas { display: block; }
         
-        /* 필드 및 슬롯 */
-        #field { flex: 1; display: flex; flex-direction: column; justify-content: center; gap: 20px; }
-        .row { display: flex; justify-content: center; gap: 12px; }
-        .slot { width: 85px; height: 115px; border: 2px solid #334155; border-radius: 12px; position: relative; transition: 0.3s; }
-        .slot.active { border-color: #60a5fa; background: rgba(96, 165, 250, 0.1); }
-
-        /* 카드 디자인 강화 */
-        .card { width: 85px; height: 115px; border-radius: 10px; position: relative; display: flex; flex-direction: column; align-items: center; justify-content: center; font-size: 12px; font-weight: bold; cursor: pointer; border: 2px solid #475569; background: #1e293b; transition: 0.2s; }
-        .card.selected { transform: translateY(-15px); border-color: white; box-shadow: 0 0 15px rgba(255,255,255,0.5); }
-        .card .type-icon { position: absolute; top: 5px; right: 5px; font-size: 10px; padding: 2px 4px; border-radius: 4px; }
-        .card.ATTACKER { border-color: var(--card-atk); }
-        .card.GUARDIAN { border-color: var(--card-def); }
-        .card.SUPPORTER { border-color: var(--card-sup); }
-        .card .stat { position: absolute; bottom: 5px; font-size: 14px; }
-        .card .shield-icon { position: absolute; top: 20px; font-size: 20px; color: #3b82f6; opacity: 0.8; }
-
-        /* 하단 컨트롤 */
-        #hand-area { height: 130px; display: flex; justify-content: center; align-items: flex-end; gap: 8px; padding-bottom: 20px; }
-        .btn-turn { position: fixed; right: 20px; bottom: 150px; width: 70px; height: 70px; border-radius: 50%; border: none; background: #f43f5e; color: white; font-weight: bold; cursor: pointer; box-shadow: 0 4px 15px rgba(244, 63, 94, 0.4); }
-        .btn-turn:disabled { background: #475569; opacity: 0.5; }
-
-        #overlay { position: fixed; inset: 0; background: var(--bg); z-index: 100; display: flex; flex-direction: column; align-items: center; justify-content: center; }
-        input { padding: 12px; border-radius: 8px; border: none; margin: 10px; width: 200px; text-align: center; }
+        #ui-layer { position: absolute; top: 0; left: 0; width: 100%; padding: 20px; box-sizing: border-box; display: flex; justify-content: space-between; pointer-events: none; }
+        .player-info { background: rgba(255,255,255,0.7); padding: 10px 20px; border-radius: 15px; text-align: center; }
+        .hp-bar { width: 150px; height: 20px; background: #555; border-radius: 10px; overflow: hidden; margin-top: 5px; border: 2px solid white; }
+        .hp-fill { height: 100%; transition: width 0.3s; }
+        #turn-indicator { position: absolute; top: 80px; width: 100%; text-align: center; font-size: 24px; color: white; text-shadow: 2px 2px 4px black; }
     </style>
 </head>
 <body>
 
-<div id="overlay">
-    <h1 style="letter-spacing: 5px;">CORE DUEL</h1>
-    <p>내 ID: <b id="my-id-display" style="color: #60a5fa;">발급 중...</b></p>
-    <input type="text" id="target-id" placeholder="상대방 ID 입력">
-    <button onclick="connect()" style="padding: 10px 30px; border-radius: 8px; border: none; background: #3b82f6; color: white; font-weight: bold;">대결 시작</button>
+<div id="invite-overlay">
+    <h1>CANNON DUEL</h1>
+    <p>드래그해서 조준하고 발사하세요!</p>
+    <button id="invite-btn" class="btn" onclick="copyInvite()" disabled>링크 생성 중...</button>
 </div>
 
-<div id="game-ui">
-    <div id="header">
-        <div style="color:var(--card-atk)">상대 HP: <span id="opp-hp">15</span></div>
-        <div id="turn-info">접속 대기 중</div>
-        <div style="color:var(--card-def)">내 HP: <span id="my-hp">15</span></div>
-    </div>
-
-    <div id="field">
-        <div class="row" id="opp-field">
-            <div class="slot"></div><div class="slot"></div><div class="slot"></div>
+<div id="game-container">
+    <canvas id="gameCanvas"></canvas>
+    <div id="ui-layer">
+        <div class="player-info" style="color:var(--p1)">
+            P1 (Blue)
+            <div class="hp-bar"><div id="p1-hp" class="hp-fill" style="width:100%; background:var(--p1)"></div></div>
         </div>
-        <div class="row" id="my-field">
-            <div class="slot" onclick="deploy(0)"></div>
-            <div class="slot" onclick="deploy(1)"></div>
-            <div class="slot" onclick="deploy(2)"></div>
+        <div class="player-info" style="color:var(--p2)">
+            P2 (Red)
+            <div class="hp-bar"><div id="p2-hp" class="hp-fill" style="width:100%; background:var(--p2)"></div></div>
         </div>
     </div>
-
-    <div style="text-align:center; font-size:12px; margin-bottom:5px;">
-        ENERGY: <span id="energy">1</span> / <span id="max-energy">1</span>
-    </div>
-
-    <div id="hand-area"></div>
+    <div id="turn-indicator">접속 대기 중...</div>
 </div>
-
-<button class="btn-turn" id="turn-btn" onclick="endTurn()" disabled>TURN<br>END</button>
 
 <script>
-    // 1. 카드 데이터베이스 (다양한 능력치와 타입)
-    const cardDB = [
-        { name: "돌격병", atk: 3, cost: 1, type: "ATTACKER", desc: "공격 최적화" },
-        { name: "방패병", atk: 1, cost: 1, type: "GUARDIAN", shield: true, desc: "1회 생존" },
-        { name: "보급병", atk: 1, cost: 1, type: "SUPPORTER", effect: "ENERGY", desc: "+1 에너지" },
-        { name: "광전사", atk: 5, cost: 2, type: "ATTACKER", desc: "강력한 일격" },
-        { name: "철벽기사", atk: 2, cost: 2, type: "GUARDIAN", shield: true, desc: "단단한 방어" },
-        { name: "학자", atk: 1, cost: 2, type: "SUPPORTER", effect: "DRAW", desc: "+1 드로우" }
-    ];
+    // === 설정 및 상수 ===
+    const GRAVITY = 0.2;
+    const MAX_POWER = 25;
+    const TANK_SIZE = 30;
+    let canvas, ctx, width, height;
+    let myId, conn, isHost = false, iAmP1 = false;
 
-    let state = {
-        myHP: 15, oppHP: 15, energy: 1, maxEnergy: 1,
-        myField: [null, null, null], oppField: [null, null, null],
-        hand: [], isMyTurn: false, selectedIdx: null
+    // === 게임 상태 ===
+    let gameState = {
+        terrain: [], // 지형 높이 배열
+        p1: { x: 100, y: 0, hp: 100, color: '#0000FF' },
+        p2: { x: 0, y: 0, hp: 100, color: '#FF0000' },
+        turn: 1, // 1 or 2
+        projectile: null, // 날아가는 포탄 정보
+        aiming: null // 조준 정보 {startX, startY, currentX, currentY}
     };
 
-    let peer, conn;
+    // === 1. 네트워크 및 초기화 ===
+    const peer = new Peer(null, { config: {'iceServers': [{ url: 'stun:stun.l.google.com:19302' }]} });
+    
+    peer.on('open', id => {
+        myId = id;
+        document.getElementById('invite-btn').disabled = false;
+        document.getElementById('invite-btn').innerText = "링크 복사 & 게임 시작";
+        if(window.location.hash) connectTo(window.location.hash.substring(1));
+    });
+    peer.on('connection', c => { conn = c; isHost = true; iAmP1 = true; setupConn(); });
 
-    // 2. 연결 및 초기화
-    peer = new Peer();
-    peer.on('open', id => document.getElementById('my-id-display').innerText = id);
-    peer.on('connection', c => { conn = c; setup(); state.isMyTurn = false; initGame(); });
-
-    function connect() {
-        const tid = document.getElementById('target-id').value;
-        if(!tid) return;
-        conn = peer.connect(tid);
-        setup();
-        state.isMyTurn = true;
-        initGame();
+    function copyInvite() {
+        const url = `${window.location.origin}${window.location.pathname}#${myId}`;
+        navigator.clipboard.writeText(url).then(() => alert("링크 복사 완료! 상대가 접속하면 시작합니다."));
     }
+    function connectTo(tid) { conn = peer.connect(tid); isHost = false; iAmP1 = false; setupConn(); }
 
-    function setup() {
-        conn.on('open', () => document.getElementById('overlay').style.display = 'none');
+    function setupConn() {
+        conn.on('open', () => {
+            document.getElementById('invite-overlay').style.display = 'none';
+            document.getElementById('game-container').style.display = 'block';
+            initCanvas();
+            setupInput();
+            if(isHost) initGameHost();
+            requestAnimationFrame(gameLoop);
+        });
         conn.on('data', data => {
-            if(data.type === 'SYNC') {
-                state.oppField = data.field;
-                state.oppHP = data.myHP;
-                if(data.isTurnEnd) startTurn(data.nextEnergy);
-                render();
+            if(isHost && data.type === 'FIRE') { fire(data.angle, data.power); }
+            else if(!isHost && data.type === 'SYNC') { 
+                gameState = data.state; 
+                updateUI();
             }
         });
     }
 
-    // 3. 게임 엔진
-    function initGame() {
-        for(let i=0; i<3; i++) draw();
-        render();
+    // === 2. 게임 로직 (호스트 중심) ===
+    function initCanvas() {
+        canvas = document.getElementById('gameCanvas');
+        ctx = canvas.getContext('2d');
+        resize();
+        window.addEventListener('resize', resize);
+    }
+    function resize() { width = canvas.width = window.innerWidth; height = canvas.height = window.innerHeight; }
+
+    function initGameHost() {
+        // 지형 생성 (간단한 사인파 + 노이즈)
+        gameState.terrain = [];
+        for(let x=0; x<=width; x+=10) {
+            const heightMap = Math.sin(x * 0.005) * 100 + Math.sin(x * 0.02) * 30 + height * 0.7;
+            gameState.terrain.push({x: x, y: heightMap});
+        }
+        gameState.p1.y = getTerrainHeight(gameState.p1.x);
+        gameState.p2.x = width - 100;
+        gameState.p2.y = getTerrainHeight(gameState.p2.x);
+        sync();
+    }
+
+    function getTerrainHeight(x) {
+        for(let i=0; i<gameState.terrain.length-1; i++) {
+            if(x >= gameState.terrain[i].x && x <= gameState.terrain[i+1].x) return gameState.terrain[i].y;
+        }
+        return height;
+    }
+
+    function fire(angle, power) {
+        if(gameState.projectile) return; // 이미 발사 중이면 무시
+        const shooter = gameState.turn === 1 ? gameState.p1 : gameState.p2;
+        gameState.projectile = {
+            x: shooter.x, y: shooter.y - TANK_SIZE,
+            vx: Math.cos(angle) * power, vy: Math.sin(angle) * power,
+            radius: 5
+        };
+        if(isHost) sync();
+    }
+
+    function updatePhysics() {
+        if(!isHost || !gameState.projectile) return;
+        const p = gameState.projectile;
+        p.vy += GRAVITY;
+        p.x += p.vx; p.y += p.vy;
+
+        // 충돌 체크 (지형 또는 화면 밖)
+        const terrainH = getTerrainHeight(p.x);
+        if(p.y > terrainH || p.x < 0 || p.x > width) {
+            checkHit(p.x, p.y);
+            gameState.projectile = null;
+            gameState.turn = gameState.turn === 1 ? 2 : 1;
+            sync();
+        }
+    }
+
+    function checkHit(x, y) {
+        const target = gameState.turn === 1 ? gameState.p2 : gameState.p1;
+        const dist = Math.sqrt((x-target.x)**2 + (y-target.y)**2);
+        if(dist < TANK_SIZE + 10) { // 직격 판정 범위
+            target.hp = Math.max(0, target.hp - 30); // 데미지 30
+            if(target.hp === 0) setTimeout(() => { alert(`Player ${gameState.turn} Wins!`); location.reload(); }, 500);
+        }
+    }
+
+    function sync() { if(isHost && conn) conn.send({type: 'SYNC', state: gameState}); updateUI(); }
+
+    // === 3. 입력 및 렌더링 ===
+    function setupInput() {
+        let isAiming = false;
+        canvas.addEventListener('pointerdown', e => {
+            if(gameState.turn !== (iAmP1 ? 1 : 2) || gameState.projectile) return;
+            isAiming = true;
+            gameState.aiming = { startX: e.clientX, startY: e.clientY, currentX: e.clientX, currentY: e.clientY };
+        });
+        canvas.addEventListener('pointermove', e => {
+            if(!isAiming) return;
+            gameState.aiming.currentX = e.clientX; gameState.aiming.currentY = e.clientY;
+        });
+        canvas.addEventListener('pointerup', e => {
+            if(!isAiming) return;
+            isAiming = false;
+            const dx = gameState.aiming.startX - gameState.aiming.currentX;
+            const dy = gameState.aiming.startY - gameState.aiming.currentY;
+            const power = Math.min(Math.sqrt(dx*dx + dy*dy) / 10, MAX_POWER);
+            const angle = Math.atan2(dy, dx);
+            gameState.aiming = null;
+            if(power > 2) { // 너무 약하면 발사 안 함
+                if(isHost) fire(angle, power);
+                else conn.send({type: 'FIRE', angle: angle, power: power});
+            }
+        });
+    }
+
+    function gameLoop() {
+        updatePhysics();
+        draw();
+        requestAnimationFrame(gameLoop);
     }
 
     function draw() {
-        if(state.hand.length < 5) {
-            const card = cardDB[Math.floor(Math.random()*cardDB.length)];
-            state.hand.push({...card, uid: Math.random(), currentShield: card.shield});
-        }
-    }
-
-    function startTurn(energy) {
-        state.isMyTurn = true;
-        state.maxEnergy = energy;
-        state.energy = energy;
-        draw();
-        battle(); // 턴 시작 시 자동 전투
-        render();
-    }
-
-    function deploy(slotIdx) {
-        if(state.selectedIdx === null || state.myField[slotIdx]) return;
-        const card = state.hand[state.selectedIdx];
-        if(state.energy >= card.cost) {
-            state.energy -= card.cost;
-            // 소환 시 즉시 효과
-            if(card.effect === "ENERGY") state.energy++;
-            if(card.effect === "DRAW") draw();
-
-            state.myField[slotIdx] = card;
-            state.hand.splice(state.selectedIdx, 1);
-            state.selectedIdx = null;
-            sync(false);
-            render();
-        }
-    }
-
-    function battle() {
-        state.myField.forEach((myCard, i) => {
-            if(!myCard) return;
-            const oppCard = state.oppField[i];
-
-            if(oppCard) {
-                // 가디언의 보호막 로직
-                if(oppCard.currentShield) {
-                    oppCard.currentShield = false;
-                    state.myField[i] = null; // 공격자는 파괴
-                } else if(myCard.currentShield) {
-                    myCard.currentShield = false;
-                    state.oppField[i] = null; // 방어자 파괴
-                } else {
-                    state.myField[i] = null;
-                    state.oppField[i] = null;
-                }
-            } else {
-                state.oppHP -= myCard.atk;
-            }
-        });
-        if(state.oppHP <= 0) alert("승리!");
-    }
-
-    function endTurn() {
-        state.isMyTurn = false;
-        sync(true, Math.min(state.maxEnergy + 1, 5));
-        render();
-    }
-
-    function sync(isTurnEnd, nextEnergy = 0) {
-        conn.send({ type: 'SYNC', field: state.myField, myHP: state.myHP, isTurnEnd, nextEnergy });
-    }
-
-    // 4. UI 렌더링
-    function render() {
-        const handArea = document.getElementById('hand-area');
-        handArea.innerHTML = '';
-        state.hand.forEach((c, i) => {
-            const d = document.createElement('div');
-            d.className = `card ${c.type} ${state.selectedIdx === i ? 'selected' : ''}`;
-            d.innerHTML = `<span class="type-icon">${c.type}</span><b>${c.name}</b><span class="stat">ATK ${c.atk}</span>`;
-            d.onclick = () => { if(state.isMyTurn) state.selectedIdx = (state.selectedIdx === i ? null : i); render(); };
-            handArea.appendChild(d);
-        });
-
-        renderRow('my-field', state.myField, false);
-        renderRow('opp-field', state.oppField, true);
-
-        document.getElementById('my-hp').innerText = state.myHP;
-        document.getElementById('opp-hp').innerText = state.oppHP;
-        document.getElementById('energy').innerText = state.energy;
-        document.getElementById('max-energy').innerText = state.maxEnergy;
-        document.getElementById('turn-btn').disabled = !state.isMyTurn;
-        document.getElementById('turn-info').innerText = state.isMyTurn ? "MY TURN" : "ENEMY TURN";
+        ctx.clearRect(0, 0, width, height);
         
-        document.querySelectorAll('#my-field .slot').forEach((s, i) => {
-            s.classList.toggle('active', state.selectedIdx !== null && !state.myField[i]);
-        });
+        // 지형 그리기
+        ctx.fillStyle = '#228B22';
+        ctx.beginPath();
+        ctx.moveTo(0, height);
+        gameState.terrain.forEach(p => ctx.lineTo(p.x, p.y));
+        ctx.lineTo(width, height);
+        ctx.fill();
+
+        // 플레이어 그리기
+        drawTank(gameState.p1);
+        drawTank(gameState.p2);
+
+        // 포탄 그리기
+        if(gameState.projectile) {
+            ctx.fillStyle = 'black';
+            ctx.beginPath();
+            ctx.arc(gameState.projectile.x, gameState.projectile.y, gameState.projectile.radius, 0, Math.PI*2);
+            ctx.fill();
+        }
+
+        // 조준선 그리기 (드래그 중일 때)
+        if(gameState.aiming && gameState.turn === (iAmP1 ? 1 : 2)) {
+            const me = iAmP1 ? gameState.p1 : gameState.p2;
+            ctx.strokeStyle = 'rgba(255, 255, 255, 0.5)';
+            ctx.lineWidth = 3;
+            ctx.setLineDash([10, 10]);
+            ctx.beginPath();
+            ctx.moveTo(me.x, me.y - TANK_SIZE);
+            const dx = gameState.aiming.startX - gameState.aiming.currentX;
+            const dy = gameState.aiming.startY - gameState.aiming.currentY;
+            ctx.lineTo(me.x + dx, me.y - TANK_SIZE + dy);
+            ctx.stroke();
+            ctx.setLineDash([]);
+        }
     }
 
-    function renderRow(id, data, isOpp) {
-        const slots = document.getElementById(id).children;
-        for(let i=0; i<3; i++) {
-            slots[i].innerHTML = '';
-            if(data[i]) {
-                const c = data[i];
-                slots[i].innerHTML = `
-                    <div class="card ${c.type} ${isOpp?'':'me'}">
-                        ${c.currentShield ? '<div class="shield-icon">🛡️</div>' : ''}
-                        <b>${c.name}</b>
-                        <span class="stat">${c.atk}</span>
-                    </div>`;
-            }
-        }
+    function drawTank(p) {
+        ctx.fillStyle = p.color;
+        ctx.fillRect(p.x - TANK_SIZE/2, p.y - TANK_SIZE/2, TANK_SIZE, TANK_SIZE/2); // 몸체
+        ctx.beginPath(); ctx.arc(p.x, p.y - TANK_SIZE/2, TANK_SIZE/2, Math.PI, 0); ctx.fill(); // 포탑
+    }
+
+    function updateUI() {
+        document.getElementById('p1-hp').style.width = gameState.p1.hp + '%';
+        document.getElementById('p2-hp').style.width = gameState.p2.hp + '%';
+        const turnText = gameState.turn === 1 ? "P1 (Blue) 차례" : "P2 (Red) 차례";
+        const myTurn = gameState.turn === (iAmP1 ? 1 : 2);
+        document.getElementById('turn-indicator').innerText = myTurn ? "당신의 차례! 드래그해서 발사!" : turnText;
+        document.getElementById('turn-indicator').style.color = myTurn ? "yellow" : "white";
     }
 </script>
 </body>
