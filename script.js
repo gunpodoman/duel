@@ -10,7 +10,7 @@ let state = {
     turn: 1, wind: 0, ball: null, gameOver: false, winner: 0
 };
 
-// --- [2] 네트워크 핸드셰이크 (접속 보장) ---
+// --- [2] 네트워크 핸드셰이크 ---
 const peer = new Peer(null, {
     config: { 'iceServers': [{ urls: 'stun:stun.l.google.com:19302' }, { urls: 'stun:stun1.l.google.com:19302' }] }
 });
@@ -42,9 +42,7 @@ function setupConn() {
         initCanvas();
         if(isHost) {
             createTerrain();
-            // 호스트는 지형 생성 후 기다립니다.
         } else {
-            // [해결] 게스트가 연결되자마자 데이터를 요청합니다.
             conn.send({ type: 'REQ_INIT' });
         }
         requestAnimationFrame(loop);
@@ -52,14 +50,14 @@ function setupConn() {
 
     conn.on('data', data => {
         if(data.type === 'REQ_INIT' && isHost) {
-            sync(); // 게스트 요청에 즉시 전체 상태 전송
+            sync();
         }
         if(data.type === 'SYNC') {
             state = data.state;
             updateUI();
         }
         if(data.type === 'FIRE') {
-            state.ball = data.ball; // 발사 동기화
+            state.ball = data.ball;
         }
     });
 }
@@ -71,7 +69,7 @@ function sync() {
     updateUI();
 }
 
-// --- [3] 물리 엔진 및 턴 로직 (턴 막힘 해결) ---
+// --- [3] 물리 엔진 및 턴 로직 ---
 function update() {
     if(!state.ball || state.gameOver) return;
 
@@ -82,7 +80,6 @@ function update() {
     const dist = Math.sqrt((b.x - target.x)**2 + (b.y - (target.y - 15))**2);
     const groundY = getTerrainY(b.x);
     
-    // 충돌 시
     if(dist < HIT_RADIUS || b.y > groundY || b.x < 0 || b.x > w) {
         createBoom(b.x, b.y, state.turn === 1 ? '#3b82f6' : '#ef4444');
         
@@ -91,19 +88,19 @@ function update() {
                 target.hp = Math.max(0, target.hp - 34);
                 if(target.hp <= 0) { state.gameOver = true; state.winner = state.turn; }
             }
-            state.ball = null; // 호스트에서 포탄 제거
+            state.ball = null;
             if(!state.gameOver) {
-                state.turn = state.turn === 1 ? 2 : 1; // [해결] 확실한 턴 교체
+                state.turn = state.turn === 1 ? 2 : 1;
                 state.wind = (Math.random() - 0.5) * 0.4;
             }
-            sync(); // 결과 강제 전송
+            sync();
         } else {
-            state.ball = null; // 게스트는 결과 대기
+            state.ball = null;
         }
     }
 }
 
-// --- [4] 입력 및 UI (기능 유지) ---
+// --- [4] 입력 및 UI ---
 let input = { active:false, sx:0, sy:0, cx:0, cy:0 };
 function setupInput() {
     canvas.addEventListener('pointerdown', e => {
@@ -165,41 +162,54 @@ function createTerrain() {
 function getTerrainY(x) {
     for(let i=0; i<state.terrain.length-1; i++) {
         if(x >= state.terrain[i].x && x <= state.terrain[i+1].x) {
-            let r = (x-state.terrain[i].x)/(state.terrain[i+1].x-state.terrain[i].x);
+            let r = (x - state.terrain[i].x) / (state.terrain[i+1].x - state.terrain[i].x);
             return state.terrain[i].y*(1-r)+state.terrain[i+1].y*r;
         }
     }
     return h;
 }
 function loop() { update(); draw(); requestAnimationFrame(loop); }
+
+// [수정됨] draw 함수: 지형 렌더링 개선
 function draw() {
     ctx.clearRect(0,0,w,h);
+    // 하늘 배경
     let g = ctx.createLinearGradient(0,0,0,h); g.addColorStop(0,'#020617'); g.addColorStop(1,'#1e293b');
     ctx.fillStyle = g; ctx.fillRect(0,0,w,h);
+    
+    // 지형 그리기
     if(state.terrain.length) {
-        ctx.beginPath(); ctx.moveTo(0,h); state.terrain.forEach(p => ctx.lineTo(p.x, p.y));
-        ctx.lineTo(w,h); ctx.fillStyle = '#0f172a'; ctx.fill();
+        // 땅 채우기
+        ctx.beginPath(); ctx.moveTo(0, h);
+        state.terrain.forEach(p => ctx.lineTo(p.x, p.y));
+        ctx.lineTo(w, h); ctx.closePath();
+        ctx.fillStyle = '#334155'; // 더 밝은 색으로 변경하여 가시성 확보
+        ctx.fill();
+
+        // 지형 표면 테두리 선 그리기
+        ctx.beginPath();
+        state.terrain.forEach((p, i) => {
+             if(i===0) ctx.moveTo(p.x, p.y); else ctx.lineTo(p.x, p.y);
+        });
+        ctx.strokeStyle = '#94a3b8'; // 밝은 회색 선
+        ctx.lineWidth = 3;
+        ctx.stroke();
     }
+
     drawTank(state.p1, 1); drawTank(state.p2, 2);
     if(state.ball) {
-        ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(state.ball.x, state.ball.y, 6, 0, Math.PI*2); ctx.fill();
+        ctx.fillStyle = '#fff'; ctx.shadowBlur = 15; ctx.shadowColor = '#fff';
+        ctx.beginPath(); ctx.arc(state.ball.x, state.ball.y, 6, 0, Math.PI*2); ctx.fill();
+        ctx.shadowBlur = 0;
     }
-    if(input.active && state.turn === myNum && !state.ball) {
-        const p = myNum === 1 ? state.p1 : state.p2;
-        const dx = input.sx - input.cx, dy = input.sy - input.cy;
-        const pwr = Math.min(Math.sqrt(dx*dx+dy*dy)*0.15, 25);
-        const ang = Math.atan2(dy, dx);
-        ctx.beginPath(); ctx.setLineDash([5,5]); ctx.strokeStyle = 'rgba(255,255,255,0.3)';
-        let tx = p.x, ty = p.y-15, tvx = Math.cos(ang)*pwr, tvy = Math.sin(ang)*pwr;
-        for(let i=0; i<30; i++) { ctx.lineTo(tx, ty); tvx += state.wind; tvy += GRAVITY; tx += tvx; ty += tvy; }
-        ctx.stroke(); ctx.setLineDash([]);
-    }
+    if(input.active && state.turn === myNum && !state.ball) drawGuide();
     particles.forEach((p,i) => {
         p.x += p.vx; p.y += p.vy; p.a -= 0.02;
         ctx.fillStyle = `rgba(${p.c}, ${p.a})`; ctx.fillRect(p.x, p.y, p.s, p.s);
         if(p.a <= 0) particles.splice(i,1);
     });
 }
+
 function drawTank(p, n) {
     ctx.save(); ctx.translate(p.x, p.y);
     ctx.fillStyle = n === 1 ? '#3b82f6' : '#ef4444';
@@ -209,9 +219,19 @@ function drawTank(p, n) {
     ctx.beginPath(); ctx.moveTo(0,-15); ctx.lineTo(Math.cos(p.angle)*30, Math.sin(p.angle)*30-15); ctx.stroke();
     ctx.restore();
 }
+function drawGuide() {
+    const p = myNum === 1 ? state.p1 : state.p2;
+    const dx = input.sx - input.cx, dy = input.sy - input.cy;
+    const pwr = Math.min(Math.sqrt(dx*dx+dy*dy)*0.15, 25);
+    const ang = Math.atan2(dy, dx);
+    ctx.beginPath(); ctx.setLineDash([6,6]); ctx.strokeStyle = 'rgba(255,255,255,0.4)';
+    let tx = p.x, ty = p.y-15, tvx = Math.cos(ang)*pwr, tvy = Math.sin(ang)*pwr;
+    for(let i=0; i<40; i++) { ctx.lineTo(tx, ty); tvx += state.wind; tvy += GRAVITY; tx += tvx; ty += tvy; }
+    ctx.stroke(); ctx.setLineDash([]);
+}
 function createBoom(x, y, color) {
     const rgb = color === '#3b82f6' ? '59, 130, 246' : '239, 68, 68';
-    for(let i=0; i<20; i++) particles.push({ x, y, vx:(Math.random()-0.5)*10, vy:(Math.random()-0.5)*10, s:Math.random()*5+2, a:1, c:rgb });
+    for(let i=0; i<30; i++) particles.push({ x, y, vx:(Math.random()-0.5)*12, vy:(Math.random()-0.5)*12, s:Math.random()*6+2, a:1, c:rgb });
 }
 function copyLink() {
     const url = `${window.location.origin}${window.location.pathname}#${myId}`;
