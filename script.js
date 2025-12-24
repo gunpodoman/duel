@@ -1,12 +1,8 @@
-// --- [1] 전역 설정 및 상태 ---
+// --- [1] 기본 설정 ---
 const GRAVITY = 0.25;
-const TANK_SIZE = 35;
 const HIT_RADIUS = 30; 
-const PING_INTERVAL = 5000;
-
 let canvas, ctx, w, h, myId, conn, isHost = false, myNum = 0;
 let particles = [];
-let heartbeatTimer;
 
 let state = {
     terrain: [],
@@ -15,114 +11,150 @@ let state = {
     turn: 1, wind: 0, ball: null, gameOver: false, winner: 0
 };
 
-// --- [2] 네트워크 엔진 (버그 수정판) ---
-const peerConfig = {
-    config: {
-        'iceServers': [
-            { url: 'stun:stun.l.google.com:19302' },
-            { url: 'stun:stun1.l.google.com:19302' },
-            { url: 'stun:global.stun.twilio.com:3478' },
-            {
-                urls: 'turn:openrelay.metered.ca:443',
-                username: 'openrelayproject',
-                credential: 'openrelayproject'
-            }
-        ],
-        iceCandidatePoolSize: 10
-    }
-};
-
-const peer = new Peer(null, peerConfig);
+// --- [2] 초안정 네트워크 엔진 ---
+const peer = new Peer(null, {
+    config: { 'iceServers': [{ url: 'stun:stun.l.google.com:19302' }, { url: 'stun:stun1.l.google.com:19302' }] },
+    debug: 1
+});
 
 peer.on('open', id => {
     myId = id;
     const btn = document.getElementById('invite-btn');
     btn.disabled = false;
-    btn.innerText = "초대 링크 복사 및 대기";
-    if(window.location.hash) {
-        initiateConnection(window.location.hash.substring(1));
-    }
+    btn.innerText = "초대 링크 복사";
+    document.getElementById('status').innerText = "서버 연결 완료. 링크를 공유하세요.";
+    if(window.location.hash) connectToHost(window.location.hash.substring(1));
 });
 
+// 호스트: 연결 대기
 peer.on('connection', c => {
-    if (conn) { c.close(); return; }
-    conn = c;
-    isHost = true;
-    myNum = 1;
-    bindConnectionEvents();
+    conn = c; isHost = true; myNum = 1;
+    setupConnection();
 });
 
-function initiateConnection(targetId) {
-    conn = peer.connect(targetId, { reliable: true });
-    isHost = false;
-    myNum = 2;
-    bindConnectionEvents();
+// 게스트: 연결 시도
+function connectToHost(hostId) {
+    conn = peer.connect(hostId, { reliable: true });
+    isHost = false; myNum = 2;
+    setupConnection();
 }
 
-function bindConnectionEvents() {
+function setupConnection() {
     conn.on('open', () => {
-        startHeartbeat();
         document.getElementById('overlay').style.display = 'none';
         document.getElementById('game-ui').style.display = 'block';
         initCanvas();
         
         if(isHost) {
             createTerrain();
-            // 호스트는 지형을 만들고 대기합니다.
-        } else {
-            // [수정] 게스트가 접속 성공 시 호스트에게 데이터를 요청합니다.
-            conn.send({ type: 'GUEST_READY' });
+            // [중요] 접속 성공 즉시 0.5초 후 초기 데이터 강제 전송
+            setTimeout(sync, 500); 
         }
         requestAnimationFrame(loop);
     });
 
     conn.on('data', data => {
-        if(data.type === 'GUEST_READY' && isHost) {
-            // [수정] 게스트의 준비 신호를 받으면 즉시 맵 정보를 보냅니다.
-            sync();
-        }
-        handleIncomingData(data);
-    });
-
-    conn.on('close', handleDisconnect);
-    conn.on('error', handleDisconnect);
-}
-
-function handleIncomingData(data) {
-    switch(data.type) {
-        case 'SYNC':
+        if(data.type === 'SYNC') {
             state = data.state;
             updateUI();
-            break;
-        case 'FIRE':
-            state.ball = { ...data.payload };
-            break;
-        case 'PING':
-            if(conn && conn.open) conn.send({ type: 'PONG' });
-            break;
+        }
+        if(data.type === 'FIRE') {
+            state.ball = data.ball;
+        }
+    });
+
+    conn.on('close', () => { alert("연결 종료"); location.reload(); });
+}
+
+function sync() {
+    if(isHost && conn && conn.open) {
+        conn.send({ type: 'SYNC', state: state });
+    }
+    updateUI();
+}
+
+// --- [3] 물리 및 게임 로직 (턴 고착 현상 해결) ---
+
+function updatePhysics() {
+    if(!state.ball || state.gameOver) return;
+
+    const b = state.ball;
+    b.vx += b.wind; b.vy += GRAVITY; b.x += b.vx; b.y += b.vy;
+
+    const target = state.turn === 1 ? state.p2 : state.p1;
+    const dist = Math.sqrt((b.x - target.x)**2 + (b.y - (target.y - 15))**2);
+    const groundY = getTerrainY(b.x);
+    
+    // 충돌 판정 (호스트가 결정)
+    if(dist < HIT_RADIUS || b.y > groundY || b.x < 0 || b.x > w) {
+        createBoom(b.x, b.y, state.turn === 1 ? '#3b82f6' : '#ef4444');
+        
+        if(isHost) {
+            if(dist < HIT_RADIUS + 10) {
+                target.hp = Math.max(0, target.hp - 34);
+                if(target.hp <= 0) { state.gameOver = true; state.winner = state.turn; }
+            }
+            state.ball = null; // 포탄 제거
+            if(!state.gameOver) {
+                state.turn = state.turn === 1 ? 2 : 1; // 턴 전환
+                state.wind = (Math.random() - 0.5) * 0.4; // 바람 변경
+            }
+            sync(); // [중요] 모든 변경사항을 즉시 게스트에게 강제 동기화
+        } else {
+            state.ball = null; // 게스트는 시각적으로만 포탄 지우고 SYNC 대기
+        }
     }
 }
 
-function startHeartbeat() {
-    heartbeatTimer = setInterval(() => {
-        if (conn && conn.open) conn.send({ type: 'PING' });
-    }, PING_INTERVAL);
-}
+// --- [4] 입력 및 UI 제어 ---
 
-function handleDisconnect() {
-    clearInterval(heartbeatTimer);
-    alert("연결이 끊어졌습니다.");
-    window.location.href = window.location.pathname;
-}
-
-function copyLink() {
-    const url = `${window.location.origin}${window.location.pathname}#${myId}`;
-    navigator.clipboard.writeText(url).then(() => {
-        document.getElementById('status').innerText = "링크가 복사되었습니다!";
+let input = { active:false, sx:0, sy:0, cx:0, cy:0 };
+function setupInput() {
+    canvas.addEventListener('pointerdown', e => {
+        if(state.turn !== myNum || state.ball || state.gameOver) return;
+        input.active = true; input.sx = input.cx = e.clientX; input.sy = input.cy = e.clientY;
+    });
+    window.addEventListener('pointermove', e => {
+        if(!input.active) return;
+        input.cx = e.clientX; input.cy = e.clientY;
+        const p = myNum === 1 ? state.p1 : state.p2;
+        p.angle = Math.atan2(input.sy - input.cy, input.sx - input.cx);
+    });
+    window.addEventListener('pointerup', () => {
+        if(!input.active) return;
+        input.active = false;
+        const dx = input.sx - input.cx, dy = input.sy - input.cy;
+        const pwr = Math.min(Math.sqrt(dx*dx+dy*dy)*0.15, 25);
+        const ang = Math.atan2(dy, dx);
+        
+        if(pwr > 3) {
+            const ballData = { x:(myNum===1?state.p1.x:state.p2.x), y:(myNum===1?state.p1.y:state.p2.y)-15, vx:Math.cos(ang)*pwr, vy:Math.sin(ang)*pwr, wind:state.wind };
+            state.ball = ballData;
+            conn.send({ type: 'FIRE', ball: ballData });
+            updateUI();
+        }
     });
 }
 
-// --- [3] 게임 물리 및 로직 (턴 버그 수정) ---
+function updateUI() {
+    document.getElementById('hp1').style.width = state.p1.hp + '%';
+    document.getElementById('hp2').style.width = state.p2.hp + '%';
+    const wnd = state.wind * 100;
+    document.getElementById('wind-ui').innerText = `WIND: ${Math.abs(wnd).toFixed(1)} ${wnd>=0?'→':'←'}`;
+    const msg = document.getElementById('msg');
+    
+    if(state.gameOver) {
+        msg.innerText = (state.winner === 1 ? "BLUE" : "RED") + " WINS!";
+        msg.style.color = state.winner === 1 ? 'var(--p1)' : 'var(--p2)';
+        msg.classList.add('show');
+    } else {
+        msg.innerText = state.turn === myNum ? "YOUR TURN" : "ENEMY TURN";
+        msg.style.color = state.turn === myNum ? 'var(--accent)' : '#fff';
+        msg.classList.add('show');
+    }
+}
+
+// --- 나머지 렌더링/유틸 (기존과 동일) ---
 
 function initCanvas() {
     canvas = document.getElementById('gameCanvas');
@@ -132,10 +164,7 @@ function initCanvas() {
     setupInput();
 }
 
-function resize() {
-    w = canvas.width = window.innerWidth;
-    h = canvas.height = window.innerHeight;
-}
+function resize() { w = canvas.width = window.innerWidth; h = canvas.height = window.innerHeight; }
 
 function createTerrain() {
     state.terrain = [];
@@ -160,61 +189,11 @@ function getTerrainY(x) {
     return h;
 }
 
-function sync() {
-    if(isHost && conn && conn.open) {
-        conn.send({ type: 'SYNC', state: state });
-        updateUI();
-    }
-}
-
 function loop() {
     updatePhysics();
     draw();
     requestAnimationFrame(loop);
 }
-
-function updatePhysics() {
-    if(!state.ball || state.gameOver) return;
-
-    const b = state.ball;
-    b.vx += b.wind; b.vy += GRAVITY; b.x += b.vx; b.y += b.vy;
-
-    const targetNum = state.turn === 1 ? 2 : 1;
-    const target = targetNum === 1 ? state.p1 : state.p2;
-    const distToTarget = Math.sqrt((b.x - target.x)**2 + (b.y - (target.y - 15))**2);
-    const groundY = getTerrainY(b.x);
-    
-    // [수정] 충돌 발생 시 로직
-    if(distToTarget < HIT_RADIUS || b.y > groundY || b.x < 0 || b.x > w) {
-        createBoom(b.x, b.y, state.turn === 1 ? '#3b82f6' : '#ef4444');
-        
-        // 중요: 물리 시뮬레이션은 각자 멈추지만, 데이터 처리는 호스트가 주도
-        if(isHost) {
-            if(distToTarget < HIT_RADIUS + 10) {
-                target.hp = Math.max(0, target.hp - 34);
-                if(target.hp <= 0) { 
-                    state.gameOver = true; 
-                    state.winner = state.turn; 
-                }
-            }
-            
-            state.ball = null; // 포탄 제거
-
-            if(!state.gameOver) {
-                state.turn = state.turn === 1 ? 2 : 1; // 턴 교체
-                state.wind = (Math.random() - 0.5) * 0.4; // 바람 변경
-            }
-            
-            // 변경된 모든 상태를 즉시 게스트에게 전송 (턴 전환의 핵심)
-            sync();
-        } else {
-            // 게스트는 포탄만 일단 지우고 호스트의 SYNC를 기다립니다.
-            state.ball = null;
-        }
-    }
-}
-
-// --- [4] 그래픽 및 조작 (기능 유지) ---
 
 function draw() {
     ctx.clearRect(0,0,w,h);
@@ -274,45 +253,9 @@ function createBoom(x, y, color) {
     }
 }
 
-let input = { active:false, sx:0, sy:0, cx:0, cy:0 };
-function setupInput() {
-    canvas.addEventListener('pointerdown', e => {
-        if(state.turn !== myNum || state.ball || state.gameOver) return;
-        input.active = true; input.sx = input.cx = e.clientX; input.sy = input.cy = e.clientY;
+function copyLink() {
+    const url = `${window.location.origin}${window.location.pathname}#${myId}`;
+    navigator.clipboard.writeText(url).then(() => {
+        document.getElementById('status').innerText = "링크 복사 완료! 친구에게 보내세요.";
     });
-    window.addEventListener('pointermove', e => {
-        if(!input.active) return;
-        input.cx = e.clientX; input.cy = e.clientY;
-        const p = myNum === 1 ? state.p1 : state.p2;
-        p.angle = Math.atan2(input.sy - input.cy, input.sx - input.cx);
-    });
-    window.addEventListener('pointerup', () => {
-        if(!input.active) return;
-        input.active = false;
-        const dx = input.sx - input.cx, dy = input.sy - input.cy;
-        const pwr = Math.min(Math.sqrt(dx*dx+dy*dy)*0.15, 25);
-        const ang = Math.atan2(dy, dx);
-        if(pwr > 3 && conn && conn.open) {
-            const firePayload = { x:(myNum===1?state.p1.x:state.p2.x), y:(myNum===1?state.p1.y:state.p2.y)-15, vx:Math.cos(ang)*pwr, vy:Math.sin(ang)*pwr, wind:state.wind };
-            conn.send({ type: 'FIRE', payload: firePayload });
-            state.ball = { ...firePayload };
-        }
-    });
-}
-
-function updateUI() {
-    document.getElementById('hp1').style.width = state.p1.hp + '%';
-    document.getElementById('hp2').style.width = state.p2.hp + '%';
-    const wnd = state.wind * 100;
-    document.getElementById('wind-ui').innerText = `WIND: ${Math.abs(wnd).toFixed(1)} ${wnd>=0?'→':'←'}`;
-    const msg = document.getElementById('msg');
-    if(state.gameOver) {
-        msg.innerText = (state.winner === 1 ? "BLUE" : "RED") + " WINS!";
-        msg.style.color = state.winner === 1 ? 'var(--p1)' : 'var(--p2)';
-        msg.classList.add('show');
-    } else {
-        msg.innerText = state.turn === myNum ? "YOUR TURN" : "ENEMY TURN";
-        msg.style.color = state.turn === myNum ? 'var(--accent)' : '#fff';
-        msg.classList.add('show');
-    }
 }
