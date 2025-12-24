@@ -1,620 +1,612 @@
 <!DOCTYPE html>
 <html lang="ko">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-  <title>Cannon Duel (Single File)</title>
-  <script src="https://cdn.jsdelivr.net/npm/peerjs@1.5.2/dist/peerjs.min.js"></script>
-  <style>
-    :root { --p1: #3b82f6; --p2: #ef4444; --accent: #fbbf24; --bg: #020617; }
-    body { margin: 0; overflow: hidden; background: var(--bg); font-family: sans-serif; touch-action: none; color: white; }
-    #overlay { position: fixed; inset: 0; background: radial-gradient(circle, #1e293b 0%, #020617 100%); z-index: 100; display: flex; align-items: center; justify-content: center; }
-    .card { background: rgba(15, 23, 42, 0.9); padding: 40px; border-radius: 32px; border: 1px solid rgba(255,255,255,0.1); text-align: center; width: 320px; }
-    .btn { width: 100%; padding: 18px; background: var(--accent); border: none; border-radius: 16px; font-weight: 800; font-size: 18px; cursor: pointer; color: #000; }
-    .btn:disabled { opacity: 0.5; cursor: not-allowed; }
-    #game-ui { display: none; width: 100vw; height: 100vh; position: relative; }
-    .hud { position: absolute; top: 0; width: 100%; display: flex; justify-content: space-between; padding: 20px; box-sizing: border-box; pointer-events: none; }
-    .hp-box { background: rgba(0,0,0,0.6); padding: 12px; border-radius: 12px; width: 160px; backdrop-filter: blur(5px); }
-    .hp-bar { width: 100%; height: 8px; background: #1e293b; border-radius: 4px; margin-top: 5px; overflow: hidden; }
-    .hp-val { height: 100%; transition: width 0.3s; }
-    #wind-ui { font-weight: 900; background: rgba(0,0,0,0.5); padding: 8px 15px; border-radius: 20px; color: var(--accent); }
-    #msg { position: absolute; top: 40%; width: 100%; text-align: center; font-size: 48px; font-weight: 900; pointer-events: none; opacity: 0; transition: 0.3s; text-shadow: 0 0 20px rgba(0,0,0,0.8); }
-    #msg.show { opacity: 1; transform: translateY(-20px); }
-    #net-toast {
-      position: absolute; bottom: 14px; left: 50%; transform: translateX(-50%);
-      background: rgba(0,0,0,0.55); padding: 8px 12px; border-radius: 14px;
-      font-size: 12px; color: #e2e8f0; pointer-events: none;
-    }
-    canvas { display:block; }
-  </style>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Cannon Duel Online</title>
+    <!-- PeerJS Library for P2P Networking -->
+    <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
+    <style>
+        :root {
+            --p1-color: #3b82f6;
+            --p2-color: #ef4444;
+            --bg-color: #0f172a;
+            --accent: #f59e0b;
+        }
+
+        body, html {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            background-color: var(--bg-color);
+            font-family: 'Pretendard', system-ui, sans-serif;
+            color: white;
+        }
+
+        #game-container {
+            position: relative;
+            width: 100vw;
+            height: 100vh;
+        }
+
+        canvas {
+            display: block;
+        }
+
+        /* --- UI Panels --- */
+        #lobby {
+            position: fixed;
+            inset: 0;
+            background: radial-gradient(circle at center, #1e293b 0%, #020617 100%);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            z-index: 100;
+            padding: 20px;
+            text-align: center;
+        }
+
+        .card {
+            background: rgba(30, 41, 59, 0.7);
+            padding: 40px;
+            border-radius: 24px;
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+            max-width: 400px;
+            width: 100%;
+        }
+
+        h1 { margin: 0 0 10px; font-size: 2.5rem; letter-spacing: -1px; }
+        p { color: #94a3b8; margin-bottom: 30px; }
+
+        .btn {
+            background: var(--accent);
+            color: black;
+            border: none;
+            padding: 16px 32px;
+            border-radius: 12px;
+            font-size: 1.1rem;
+            font-weight: bold;
+            cursor: pointer;
+            transition: transform 0.2s, background 0.2s;
+            width: 100%;
+        }
+
+        .btn:hover { background: #fbbf24; transform: translateY(-2px); }
+        .btn:active { transform: translateY(0); }
+        .btn:disabled { background: #475569; cursor: not-allowed; transform: none; }
+
+        #status-badge {
+            margin-bottom: 20px;
+            padding: 6px 16px;
+            border-radius: 99px;
+            font-size: 0.8rem;
+            font-weight: bold;
+            display: inline-block;
+        }
+
+        .status-wait { background: #334155; color: #cbd5e1; }
+        .status-ready { background: #065f46; color: #34d399; }
+
+        /* --- In-Game HUD --- */
+        #hud {
+            position: absolute;
+            top: 20px;
+            left: 0;
+            right: 0;
+            display: flex;
+            justify-content: space-between;
+            padding: 0 40px;
+            pointer-events: none;
+            display: none;
+        }
+
+        .player-info {
+            background: rgba(0, 0, 0, 0.5);
+            padding: 15px;
+            border-radius: 15px;
+            width: 200px;
+            backdrop-filter: blur(5px);
+            border-bottom: 4px solid transparent;
+        }
+
+        #p1-info { border-color: var(--p1-color); }
+        #p2-info { border-color: var(--p2-color); }
+
+        .hp-container {
+            width: 100%;
+            height: 10px;
+            background: #334155;
+            border-radius: 5px;
+            margin-top: 8px;
+            overflow: hidden;
+        }
+
+        .hp-bar {
+            height: 100%;
+            width: 100%;
+            transition: width 0.3s ease-out;
+        }
+
+        #wind-indicator {
+            position: absolute;
+            top: 30px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(0, 0, 0, 0.4);
+            padding: 8px 20px;
+            border-radius: 20px;
+            font-weight: 900;
+            color: var(--accent);
+            text-shadow: 0 2px 4px rgba(0,0,0,0.5);
+        }
+
+        #turn-msg {
+            position: absolute;
+            top: 120px;
+            width: 100%;
+            text-align: center;
+            font-size: 3rem;
+            font-weight: 900;
+            text-transform: uppercase;
+            pointer-events: none;
+            text-shadow: 0 4px 10px rgba(0,0,0,0.5);
+            opacity: 0;
+            transition: opacity 0.3s, transform 0.3s;
+        }
+
+        #turn-msg.show { opacity: 1; transform: translateY(-10px); }
+    </style>
 </head>
 <body>
-  <div id="overlay">
+
+<div id="lobby">
     <div class="card">
-      <h1 style="margin:0 0 16px 0;">CANNON DUEL</h1>
-      <div id="status-badge" style="display:inline-block; padding:5px 12px; background:#ef4444; border-radius:20px; font-size:12px; margin-bottom:15px;">서버 연결 중...</div>
-      <button id="invite-btn" class="btn" onclick="copyLink()" disabled>기다려 주세요</button>
-      <p id="status-text" style="margin-top:15px; font-size:13px; color:#94a3b8;">서버와 통신을 시작합니다.</p>
-      <p style="margin-top:10px; font-size:11px; color:#64748b; line-height:1.35;">
-        같은 와이파이가 아니어도 대부분 연결됩니다. 다만 일부 학교/회사망에서는 TURN이 필요할 수 있습니다.
-      </p>
+        <h1>CANNON DUEL</h1>
+        <p>친구와 함께하는 실시간 포격전</p>
+        <div id="status-badge" class="status-wait">서버 연결 중...</div>
+        <button id="invite-btn" class="btn" onclick="copyInviteLink()" disabled>기다려 주세요</button>
+        <div id="connection-info" style="margin-top: 20px; font-size: 0.85rem; color: #64748b;"></div>
     </div>
-  </div>
+</div>
 
-  <div id="game-ui">
+<div id="game-container">
+    <div id="hud">
+        <div id="p1-info" class="player-info">
+            <div style="font-size: 0.8rem; font-weight: bold; color: var(--p1-color);">PLAYER 1 (BLUE)</div>
+            <div class="hp-container"><div id="hp1" class="hp-bar" style="background: var(--p1-color);"></div></div>
+        </div>
+        <div id="wind-indicator">WIND: 0.00</div>
+        <div id="p2-info" class="player-info" style="text-align: right;">
+            <div style="font-size: 0.8rem; font-weight: bold; color: var(--p2-color);">PLAYER 2 (RED)</div>
+            <div class="hp-container"><div id="hp2" class="hp-bar" style="background: var(--p2-color);"></div></div>
+        </div>
+    </div>
+    <div id="turn-msg">YOUR TURN</div>
     <canvas id="gameCanvas"></canvas>
-    <div class="hud">
-      <div class="hp-box" style="border-left: 5px solid var(--p1)">
-        <div style="font-size:10px; opacity:0.8">P1 BLUE</div>
-        <div class="hp-bar"><div id="hp1" class="hp-val" style="width:100%; background:var(--p1)"></div></div>
-      </div>
-      <div id="wind-ui">WIND: 0.00 →</div>
-      <div class="hp-box" style="border-right: 5px solid var(--p2); text-align:right">
-        <div style="font-size:10px; opacity:0.8">P2 RED</div>
-        <div class="hp-bar"><div id="hp2" class="hp-val" style="width:100%; background:var(--p2)"></div></div>
-      </div>
-    </div>
-    <div id="msg">READY</div>
-    <div id="net-toast">연결 대기 중...</div>
-  </div>
+</div>
 
-  <script>
-    // =========================
-    // CONFIG
-    // =========================
-    const GRAVITY = 0.25;
-    const MAX_HP = 200;
-    const SPLASH_RADIUS = 70;
-    const HIT_BOX = 20;
+<script>
+    // --- 설정 및 상수 ---
+    const GRAVITY = 0.2;
+    const MAX_HP = 100;
+    const TANK_WIDTH = 40;
+    const TANK_HEIGHT = 20;
+    const EXPLOSION_RADIUS = 60;
 
-    // 자폭 방지: 초기 보호 프레임(직후 스플래시까지 포함)
-    const SELF_SAFE_FRAMES = 18;
-
-    // 포탄 스폰 위치(포신 끝에서 더 멀리)
-    const MUZZLE_OFFSET = 38;
-
-    // =========================
-    // STATE
-    // =========================
     let canvas, ctx, w, h;
     let myId, conn;
     let isHost = false;
-    let myNum = 0;
+    let playerNum = 0; // 1 or 2
+    let terrain = [];
     let particles = [];
-    let lastPingSent = 0;
-    let rttMs = null;
-
+    
+    // 게임 상태
     let state = {
-      terrain: [],
-      p1: { x: 0, y: 0, hp: MAX_HP, angle: -0.5 },
-      p2: { x: 0, y: 0, hp: MAX_HP, angle: 3.6 },
-      turn: 1,
-      wind: 0,
-      ball: null,     // {x,y,vx,vy,wind,age,owner}
-      gameOver: false
+        p1: { x: 100, y: 0, hp: MAX_HP, angle: -Math.PI / 4 },
+        p2: { x: 700, y: 0, hp: MAX_HP, angle: -Math.PI * 0.75 },
+        wind: 0,
+        turn: 1,
+        ball: null,
+        gameOver: false
     };
 
-    // =========================
-    // NETWORK (PeerJS)
-    // =========================
-    // STUN 서버를 명시적으로 지정 (서로 다른 와이파이/NAT에서 성공률 증가)
-    // TURN이 필요하면 아래에 추가해야 합니다.
-    const peer = new Peer(undefined, {
-      debug: 1,
-      config: {
-        iceServers: [
-          { urls: "stun:stun.l.google.com:19302" },
-          { urls: "stun:stun1.l.google.com:19302" },
-          { urls: "stun:stun2.l.google.com:19302" },
-          { urls: "stun:global.stun.twilio.com:3478?transport=udp" }
-          // TURN 예시:
-          // { urls: "turn:YOUR_TURN_HOST:3478", username: "USER", credential: "PASS" }
-        ]
-      }
+    // 마우스/터치 입력
+    let input = { active: false, startX: 0, startY: 0, currX: 0, currY: 0 };
+
+    // --- 네트워킹 로직 ---
+    const peer = new Peer();
+
+    peer.on('open', (id) => {
+        myId = id;
+        const btn = document.getElementById('invite-btn');
+        btn.disabled = false;
+        btn.innerText = "초대 링크 복사";
+        document.getElementById('status-badge').innerText = "온라인";
+        document.getElementById('status-badge').className = "status-ready";
+        
+        // URL에 해시가 있으면 게스트로 접속
+        if (window.location.hash) {
+            connectToHost(window.location.hash.substring(1));
+        }
     });
 
-    const elOverlay = document.getElementById('overlay');
-    const elGameUI = document.getElementById('game-ui');
-    const elBtn = document.getElementById('invite-btn');
-    const elBadge = document.getElementById('status-badge');
-    const elStatus = document.getElementById('status-text');
-    const elToast = document.getElementById('net-toast');
-
-    function setBadge(text, color) {
-      elBadge.innerText = text;
-      elBadge.style.background = color;
-    }
-    function toast(text) {
-      elToast.textContent = text;
-    }
-
-    peer.on('open', id => {
-      myId = id;
-      setBadge("서버 연결 완료", "#22c55e");
-      elBtn.disabled = false;
-      elBtn.innerText = "초대 링크 복사";
-      elStatus.innerText = "이제 친구를 초대할 수 있습니다.";
-
-      if (window.location.hash) {
-        startConnecting(window.location.hash.substring(1));
-      } else {
-        toast("상대 연결 대기 중...");
-      }
+    peer.on('connection', (connection) => {
+        if (conn) return; // 이미 연결된 경우 차단
+        conn = connection;
+        isHost = true;
+        playerNum = 1;
+        setupConnection();
     });
 
-    peer.on('error', err => {
-      setBadge("서버 오류", "#ef4444");
-      elStatus.innerText = "PeerJS 서버 연결에 실패했습니다. 새로고침하거나 네트워크를 확인하세요.";
-      console.error(err);
-    });
-
-    peer.on('connection', c => {
-      if (conn) return; // 중복 연결 방지
-      conn = c;
-      isHost = true;
-      myNum = 1;
-      initNetwork();
-    });
-
-    function startConnecting(targetId) {
-      conn = peer.connect(targetId, { reliable: true, serialization: 'json' });
-      isHost = false;
-      myNum = 2;
-      initNetwork();
+    function connectToHost(hostId) {
+        conn = peer.connect(hostId);
+        isHost = false;
+        playerNum = 2;
+        setupConnection();
     }
 
-    function initNetwork() {
-      toast("상대와 연결 중...");
-      conn.on('open', () => {
-        elOverlay.style.display = 'none';
-        elGameUI.style.display = 'block';
-        initCanvas();
-
-        if (isHost) {
-          createTerrain();
-          // 호스트는 초기 싱크
-          sync();
-        } else {
-          // 클라는 초기 상태 요청
-          send({ type: 'REQ_INIT' });
-        }
-
-        requestAnimationFrame(loop);
-      });
-
-      conn.on('data', data => {
-        if (!data || !data.type) return;
-
-        if (data.type === 'REQ_INIT' && isHost) {
-          sync();
-        }
-
-        if (data.type === 'SYNC') {
-          state = data.state;
-          updateUI();
-        }
-
-        // 클라이언트가 발사 요청 -> 호스트가 공 생성/시뮬
-        if (data.type === 'FIRE_REQ' && isHost) {
-          handleFireRequest(data);
-        }
-
-        if (data.type === 'PING') {
-          send({ type: 'PONG', t: data.t });
-        }
-        if (data.type === 'PONG') {
-          const now = performance.now();
-          rttMs = Math.max(0, now - data.t);
-        }
-      });
-
-      conn.on('close', () => {
-        toast("연결이 종료되었습니다. 새로고침 후 다시 시도하세요.");
-        setBadge("연결 끊김", "#ef4444");
-      });
-
-      conn.on('error', () => {
-        toast("연결 오류가 발생했습니다.");
-        setBadge("연결 오류", "#ef4444");
-      });
-    }
-
-    function send(obj) {
-      if (conn && conn.open) conn.send(obj);
-    }
-
-    function sync() {
-      if (isHost && conn && conn.open) {
-        send({ type: 'SYNC', state });
-      }
-      updateUI();
-    }
-
-    // =========================
-    // GAME LOGIC
-    // =========================
-    function update() {
-      // 네트워크 RTT 표시용 핑
-      if (conn && conn.open) {
-        const now = performance.now();
-        if (now - lastPingSent > 800) {
-          lastPingSent = now;
-          send({ type: 'PING', t: now });
-        }
-      }
-
-      if (!state.ball || state.gameOver) return;
-
-      const b = state.ball;
-      b.vx += b.wind;
-      b.vy += GRAVITY;
-      b.x += b.vx;
-      b.y += b.vy;
-      b.age = (b.age || 0) + 1;
-
-      const p1x = state.p1.x, p1y = (state.p1.y - 15);
-      const p2x = state.p2.x, p2y = (state.p2.y - 15);
-
-      const distP1 = Math.hypot(b.x - p1x, b.y - p1y);
-      const distP2 = Math.hypot(b.x - p2x, b.y - p2y);
-
-      // 직격 판정: 발사자(owner)는 영구적으로 무시 (자기 포탄에 즉시 맞는 버그 제거)
-      let hitP1 = (distP1 < HIT_BOX);
-      let hitP2 = (distP2 < HIT_BOX);
-
-      if (b.owner === 1) hitP1 = false;
-      if (b.owner === 2) hitP2 = false;
-
-      // 지면 충돌
-      const groundY = getTerrainY(b.x);
-      const out = (b.x < 0 || b.x > w);
-
-      // 폭발 조건
-      if (b.y > groundY || hitP1 || hitP2 || out) {
-        const ex = Math.min(Math.max(b.x, 0), w);
-        const ey = Math.min(b.y, h);
-        createExplosion(ex, ey);
-
-        if (isHost) {
-          // 스플래시 데미지 계산
-          const getDmg = (d) => (d > SPLASH_RADIUS) ? 0 : Math.floor(60 * (1 - d / SPLASH_RADIUS));
-
-          // 자폭 방지: 발사 직후(SELF_SAFE_FRAMES)에는 발사자에게 스플래시도 적용하지 않음
-          const safe = (b.age <= SELF_SAFE_FRAMES);
-
-          let dmg1 = 0;
-          let dmg2 = 0;
-
-          // P1
-          if (!safe || b.owner !== 1) {
-            dmg1 = hitP1 ? 50 : getDmg(distP1);
-          } else {
-            // 발사자(P1)가 안전 기간이면 피해 0
-            dmg1 = 0;
-          }
-
-          // P2
-          if (!safe || b.owner !== 2) {
-            dmg2 = hitP2 ? 50 : getDmg(distP2);
-          } else {
-            dmg2 = 0;
-          }
-
-          state.p1.hp = Math.max(0, state.p1.hp - dmg1);
-          state.p2.hp = Math.max(0, state.p2.hp - dmg2);
-
-          if (state.p1.hp <= 0 || state.p2.hp <= 0) state.gameOver = true;
-
-          state.ball = null;
-
-          if (!state.gameOver) {
-            state.turn = (state.turn === 1) ? 2 : 1;
-            state.wind = (Math.random() - 0.5) * 0.4;
-          }
-
-          sync();
-        } else {
-          // 클라는 호스트 싱크를 기다림
-          state.ball = null;
-        }
-      }
-    }
-
-    function draw() {
-      ctx.clearRect(0, 0, w, h);
-
-      // 배경
-      const grd = ctx.createLinearGradient(0, 0, 0, h);
-      grd.addColorStop(0, '#020617');
-      grd.addColorStop(1, '#1e293b');
-      ctx.fillStyle = grd;
-      ctx.fillRect(0, 0, w, h);
-
-      // 지형
-      if (state.terrain.length) {
-        ctx.beginPath();
-        ctx.moveTo(0, h);
-        state.terrain.forEach(p => ctx.lineTo(p.x, p.y));
-        ctx.lineTo(w, h);
-        ctx.closePath();
-
-        const tGrd = ctx.createLinearGradient(0, h * 0.5, 0, h);
-        tGrd.addColorStop(0, '#334155');
-        tGrd.addColorStop(1, '#0f172a');
-        ctx.fillStyle = tGrd;
-        ctx.fill();
-
-        ctx.strokeStyle = '#38bdf8';
-        ctx.lineWidth = 3;
-        ctx.shadowBlur = 15;
-        ctx.shadowColor = '#38bdf8';
-        ctx.stroke();
-        ctx.shadowBlur = 0;
-      }
-
-      drawTank(state.p1, 1);
-      drawTank(state.p2, 2);
-
-      if (state.ball) {
-        ctx.fillStyle = "white";
-        ctx.shadowBlur = 10;
-        ctx.shadowColor = "white";
-        ctx.beginPath();
-        ctx.arc(state.ball.x, state.ball.y, 5, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.shadowBlur = 0;
-      }
-
-      if (input.active && state.turn === myNum && !state.ball && !state.gameOver) {
-        drawTrajectory();
-      }
-
-      // 파티클
-      for (let i = particles.length - 1; i >= 0; i--) {
-        const p = particles[i];
-        p.x += p.vx;
-        p.y += p.vy;
-        p.opacity -= 0.02;
-        ctx.fillStyle = `rgba(251, 191, 36, ${p.opacity})`;
-        ctx.fillRect(p.x, p.y, p.size, p.size);
-        if (p.opacity <= 0) particles.splice(i, 1);
-      }
-    }
-
-    function drawTank(p, n) {
-      ctx.save();
-      ctx.translate(p.x, p.y);
-      ctx.fillStyle = (n === 1) ? '#3b82f6' : '#ef4444';
-      ctx.beginPath();
-      ctx.roundRect(-20, -10, 40, 15, 5);
-      ctx.fill();
-
-      ctx.beginPath();
-      ctx.arc(0, -10, 10, Math.PI, 0);
-      ctx.fill();
-
-      ctx.strokeStyle = ctx.fillStyle;
-      ctx.lineWidth = 6;
-      ctx.beginPath();
-      ctx.moveTo(0, -12);
-      ctx.lineTo(Math.cos(p.angle) * 25, -12 + Math.sin(p.angle) * 25);
-      ctx.stroke();
-      ctx.restore();
-    }
-
-    function drawTrajectory() {
-      const p = (myNum === 1) ? state.p1 : state.p2;
-
-      const dx = input.sx - input.cx;
-      const dy = input.sy - input.cy;
-
-      const pwr = Math.min(Math.hypot(dx, dy) * 0.15, 20);
-      const ang = Math.atan2(dy, dx);
-
-      ctx.beginPath();
-      ctx.setLineDash([5, 5]);
-      ctx.strokeStyle = "rgba(255,255,255,0.3)";
-
-      let tx = p.x + Math.cos(p.angle) * MUZZLE_OFFSET;
-      let ty = (p.y - 12) + Math.sin(p.angle) * MUZZLE_OFFSET;
-
-      let tvx = Math.cos(ang) * pwr;
-      let tvy = Math.sin(ang) * pwr;
-
-      for (let i = 0; i < 30; i++) {
-        ctx.lineTo(tx, ty);
-        tvx += state.wind;
-        tvy += GRAVITY;
-        tx += tvx;
-        ty += tvy;
-      }
-
-      ctx.stroke();
-      ctx.setLineDash([]);
-    }
-
-    // =========================
-    // INPUT (client sends FIRE_REQ, host spawns ball)
-    // =========================
-    let input = { active: false, sx: 0, sy: 0, cx: 0, cy: 0 };
-
-    function setupInput() {
-      canvas.onpointerdown = e => {
-        if (state.turn !== myNum || state.ball || state.gameOver) return;
-        input.active = true;
-        input.sx = input.cx = e.clientX;
-        input.sy = input.cy = e.clientY;
-      };
-
-      window.onpointermove = e => {
-        if (!input.active) return;
-        input.cx = e.clientX;
-        input.cy = e.clientY;
-
-        const p = (myNum === 1) ? state.p1 : state.p2;
-        p.angle = Math.atan2(input.sy - input.cy, input.sx - input.cx);
-
-        // 내 탱크 각도는 호스트 권위로만 확정할 수도 있지만,
-        // 조작감 때문에 로컬 반영(호스트는 FIRE_REQ로 계산)
-      };
-
-      window.onpointerup = () => {
-        if (!input.active) return;
-        input.active = false;
-
-        const dx = input.sx - input.cx;
-        const dy = input.sy - input.cy;
-        const pwr = Math.min(Math.hypot(dx, dy) * 0.15, 20);
-        const ang = Math.atan2(dy, dx);
-
-        if (pwr > 2 && conn && conn.open) {
-          // 발사 요청만 보냄(호스트가 공 생성)
-          send({ type: 'FIRE_REQ', shooter: myNum, angle: ang, power: pwr });
-          toast("발사 요청 전송...");
-        }
-      };
-    }
-
-    function handleFireRequest(data) {
-      // 호스트만 실행
-      if (state.gameOver) return;
-      if (data.shooter !== state.turn) return; // 턴 무시 요청 방지
-      if (state.ball) return;
-
-      const shooterNum = data.shooter;
-      const p = (shooterNum === 1) ? state.p1 : state.p2;
-
-      // 호스트 기준 각도는 요청 angle을 사용(조작감 일치)
-      p.angle = data.angle;
-
-      const bx = p.x + Math.cos(p.angle) * MUZZLE_OFFSET;
-      const by = (p.y - 12) + Math.sin(p.angle) * MUZZLE_OFFSET;
-
-      state.ball = {
-        x: bx,
-        y: by,
-        vx: Math.cos(data.angle) * data.power,
-        vy: Math.sin(data.angle) * data.power,
-        wind: state.wind,
-        age: 0,
-        owner: shooterNum
-      };
-
-      toast("발사됨(호스트)...");
-      sync();
-    }
-
-    // =========================
-    // TERRAIN
-    // =========================
-    function createTerrain() {
-      state.terrain = [];
-      let cur = h * 0.7;
-
-      for (let x = 0; x <= w + 100; x += 50) {
-        cur += (Math.random() - 0.5) * 100;
-        state.terrain.push({ x, y: Math.max(h * 0.4, Math.min(h * 0.85, cur)) });
-      }
-
-      state.p1.x = w * 0.15;
-      state.p1.y = getTerrainY(state.p1.x);
-
-      state.p2.x = w * 0.85;
-      state.p2.y = getTerrainY(state.p2.x);
-
-      state.p1.hp = MAX_HP;
-      state.p2.hp = MAX_HP;
-      state.turn = 1;
-      state.wind = (Math.random() - 0.5) * 0.4;
-      state.ball = null;
-      state.gameOver = false;
-    }
-
-    function getTerrainY(x) {
-      for (let i = 0; i < state.terrain.length - 1; i++) {
-        const a = state.terrain[i];
-        const b = state.terrain[i + 1];
-        if (x >= a.x && x <= b.x) {
-          const r = (x - a.x) / (b.x - a.x);
-          return a.y * (1 - r) + b.y * r;
-        }
-      }
-      return h;
-    }
-
-    function createExplosion(x, y) {
-      for (let i = 0; i < 30; i++) {
-        particles.push({
-          x, y,
-          vx: (Math.random() - 0.5) * 10,
-          vy: (Math.random() - 0.5) * 10,
-          size: Math.random() * 5 + 2,
-          opacity: 1
+    function setupConnection() {
+        conn.on('open', () => {
+            document.getElementById('lobby').style.display = 'none';
+            document.getElementById('hud').style.display = 'flex';
+            initCanvas();
+            
+            if (isHost) {
+                generateTerrain();
+                state.p1.x = w * 0.15;
+                state.p2.x = w * 0.85;
+                state.p1.y = getTerrainHeight(state.p1.x);
+                state.p2.y = getTerrainHeight(state.p2.x);
+                state.wind = (Math.random() - 0.5) * 0.3;
+                setTimeout(sendSync, 500);
+            } else {
+                conn.send({ type: 'REQUEST_INIT' });
+            }
+            
+            requestAnimationFrame(gameLoop);
+            showTurnMessage();
         });
-      }
+
+        conn.on('data', (data) => {
+            if (data.type === 'SYNC') {
+                state = data.state;
+                updateUI();
+            } else if (data.type === 'REQUEST_INIT' && isHost) {
+                sendSync();
+            } else if (data.type === 'FIRE') {
+                state.ball = data.ball;
+                state.ball.isSafe = true; // 발사 초기 자폭 방지
+            }
+        });
     }
 
-    // =========================
-    // UI / LOOP
-    // =========================
-    function updateUI() {
-      document.getElementById('hp1').style.width = (state.p1.hp / MAX_HP * 100) + '%';
-      document.getElementById('hp2').style.width = (state.p2.hp / MAX_HP * 100) + '%';
-      document.getElementById('wind-ui').innerText =
-        `WIND: ${Math.abs(state.wind * 100).toFixed(1)} ${state.wind > 0 ? '→' : '←'}`;
-
-      const m = document.getElementById('msg');
-      if (state.gameOver) {
-        m.innerText = "GAME OVER";
-        m.style.color = "white";
-      } else {
-        m.innerText = (state.turn === myNum) ? "YOUR TURN" : "ENEMY TURN";
-        m.style.color = (state.turn === myNum) ? "var(--accent)" : "white";
-      }
-      m.classList.add('show');
-      setTimeout(() => m.classList.remove('show'), 900);
-
-      // 네트워크 표시
-      if (conn && conn.open) {
-        const who = isHost ? "HOST" : "CLIENT";
-        const rttText = (rttMs == null) ? "RTT: ..." : `RTT: ${Math.round(rttMs)}ms`;
-        toast(`연결됨 (${who}) / ${rttText}`);
-      } else {
-        toast("연결 대기 중...");
-      }
+    function sendSync() {
+        if (conn && conn.open && isHost) {
+            conn.send({ type: 'SYNC', state: state });
+        }
+        updateUI();
     }
 
+    function copyInviteLink() {
+        const link = window.location.origin + window.location.pathname + '#' + myId;
+        navigator.clipboard.writeText(link).then(() => {
+            document.getElementById('connection-info').innerText = "링크가 복사되었습니다! 친구에게 공유하세요.";
+        });
+    }
+
+    // --- 게임 로직 ---
     function initCanvas() {
-      canvas = document.getElementById('gameCanvas');
-      ctx = canvas.getContext('2d');
-      resize();
-      setupInput();
-      window.addEventListener('resize', resize);
+        canvas = document.getElementById('gameCanvas');
+        ctx = canvas.getContext('2d');
+        resize();
+        window.addEventListener('resize', resize);
+        
+        canvas.addEventListener('mousedown', startInput);
+        canvas.addEventListener('mousemove', moveInput);
+        canvas.addEventListener('mouseup', endInput);
+        
+        canvas.addEventListener('touchstart', (e) => startInput(e.touches[0]));
+        canvas.addEventListener('touchmove', (e) => moveInput(e.touches[0]));
+        canvas.addEventListener('touchend', () => endInput());
     }
 
     function resize() {
-      canvas.width = w = window.innerWidth;
-      canvas.height = h = window.innerHeight;
-
-      // 해상도 변경 시 호스트는 지형 재생성하면 게임이 꼬이므로,
-      // 최초 진입 후에는 상태 싱크로만 맞추는 편이 안전합니다.
-      // (원하면 호스트만 리사이즈 시 재시작 기능을 따로 만들 수 있습니다.)
+        w = canvas.width = window.innerWidth;
+        h = canvas.height = window.innerHeight;
+        if (isHost && terrain.length > 0) {
+            // 지형 재설정 로직 (생략 가능하지만 호스트 기준 통일 필요)
+        }
     }
 
-    function loop() {
-      if (isHost) update(); // 호스트만 물리 확정
-      draw();
-      requestAnimationFrame(loop);
+    function generateTerrain() {
+        terrain = [];
+        let currentHeight = h * 0.6;
+        for (let x = 0; x <= w + 100; x += 40) {
+            currentHeight += (Math.random() - 0.5) * 100;
+            currentHeight = Math.max(h * 0.4, Math.min(h * 0.8, currentHeight));
+            terrain.push({ x, y: currentHeight });
+        }
+        state.terrain = terrain;
     }
 
-    // =========================
-    // INVITE LINK
-    // =========================
-    function copyLink() {
-      const link = window.location.origin + window.location.pathname + '#' + myId;
-      navigator.clipboard.writeText(link);
-      elStatus.innerText = "링크 복사됨! 친구에게 보내세요.";
+    function getTerrainHeight(x) {
+        const t = state.terrain;
+        for (let i = 0; i < t.length - 1; i++) {
+            if (x >= t[i].x && x <= t[i+1].x) {
+                const ratio = (x - t[i].x) / (t[i+1].x - t[i].x);
+                return t[i].y + (t[i+1].y - t[i].y) * ratio;
+            }
+        }
+        return h;
     }
-  </script>
+
+    function startInput(e) {
+        if (state.turn !== playerNum || state.ball || state.gameOver) return;
+        input.active = true;
+        input.startX = input.currX = e.clientX;
+        input.startY = input.currY = e.clientY;
+    }
+
+    function moveInput(e) {
+        if (!input.active) return;
+        input.currX = e.clientX;
+        input.currY = e.clientY;
+        
+        const dx = input.startX - input.currX;
+        const dy = input.startY - input.currY;
+        const p = playerNum === 1 ? state.p1 : state.p2;
+        p.angle = Math.atan2(dy, dx);
+    }
+
+    function endInput() {
+        if (!input.active) return;
+        input.active = false;
+        
+        const dx = input.startX - input.currX;
+        const dy = input.startY - input.currY;
+        const power = Math.min(Math.sqrt(dx*dx + dy*dy) * 0.15, 20);
+        
+        if (power > 2) {
+            const p = playerNum === 1 ? state.p1 : state.p2;
+            const ball = {
+                x: p.x + Math.cos(p.angle) * 35,
+                y: p.y - 10 + Math.sin(p.angle) * 35,
+                vx: Math.cos(p.angle) * power,
+                vy: Math.sin(p.angle) * power,
+                age: 0
+            };
+            state.ball = ball;
+            conn.send({ type: 'FIRE', ball: ball });
+        }
+    }
+
+    function update() {
+        // 파티클 업데이트
+        particles = particles.filter(p => {
+            p.x += p.vx; p.y += p.vy; p.vy += 0.1; p.life -= 0.02;
+            return p.life > 0;
+        });
+
+        if (!state.ball) return;
+
+        const b = state.ball;
+        b.vx += state.wind;
+        b.vy += GRAVITY;
+        b.x += b.vx;
+        b.y += b.vy;
+        b.age++;
+
+        const groundY = getTerrainHeight(b.x);
+        const distP1 = Math.sqrt((b.x - state.p1.x)**2 + (b.y - (state.p1.y - 10))**2);
+        const distP2 = Math.sqrt((b.x - state.p2.x)**2 + (b.y - (state.p2.y - 10))**2);
+
+        // 자폭 방지: 발사 후 초기 프레임 동안은 본인 충돌 무시
+        let hitP1 = distP1 < 20;
+        let hitP2 = distP2 < 20;
+        if (b.age < 10) {
+            if (state.turn === 1) hitP1 = false;
+            else hitP2 = false;
+        }
+
+        if (b.y > groundY || hitP1 || hitP2 || b.x < 0 || b.x > w) {
+            createExplosion(b.x, b.y);
+            
+            if (isHost) {
+                // 데미지 계산 (직격 또는 스플래시)
+                const dmg1 = calculateSplashDamage(b.x, b.y, state.p1.x, state.p1.y - 10);
+                const dmg2 = calculateSplashDamage(b.x, b.y, state.p2.x, state.p2.y - 10);
+                
+                state.p1.hp = Math.max(0, state.p1.hp - dmg1);
+                state.p2.hp = Math.max(0, state.p2.hp - dmg2);
+
+                if (state.p1.hp <= 0 || state.p2.hp <= 0) {
+                    state.gameOver = true;
+                }
+
+                state.ball = null;
+                if (!state.gameOver) {
+                    state.turn = state.turn === 1 ? 2 : 1;
+                    state.wind = (Math.random() - 0.5) * 0.4;
+                }
+                sendSync();
+                showTurnMessage();
+            } else {
+                state.ball = null;
+            }
+        }
+    }
+
+    function calculateSplashDamage(bx, by, px, py) {
+        const d = Math.sqrt((bx - px)**2 + (by - py)**2);
+        if (d < 20) return 40; // 직격
+        if (d < EXPLOSION_RADIUS) return Math.floor(30 * (1 - d / EXPLOSION_RADIUS));
+        return 0;
+    }
+
+    function createExplosion(x, y) {
+        for (let i = 0; i < 30; i++) {
+            particles.push({
+                x, y,
+                vx: (Math.random() - 0.5) * 10,
+                vy: (Math.random() - 0.5) * 10,
+                life: 1,
+                color: `rgb(255, ${Math.random() * 150 + 50}, 0)`
+            });
+        }
+    }
+
+    function draw() {
+        ctx.clearRect(0, 0, w, h);
+
+        // 지형 그리기
+        if (state.terrain) {
+            ctx.beginPath();
+            ctx.moveTo(0, h);
+            state.terrain.forEach(p => ctx.lineTo(p.x, p.y));
+            ctx.lineTo(w, h);
+            ctx.closePath();
+            const grad = ctx.createLinearGradient(0, h * 0.5, 0, h);
+            grad.addColorStop(0, '#334155');
+            grad.addColorStop(1, '#0f172a');
+            ctx.fillStyle = grad;
+            ctx.fill();
+            
+            // 지형 윤곽선
+            ctx.beginPath();
+            state.terrain.forEach((p, i) => i === 0 ? ctx.moveTo(p.x, p.y) : ctx.lineTo(p.x, p.y));
+            ctx.strokeStyle = '#64748b';
+            ctx.lineWidth = 3;
+            ctx.stroke();
+        }
+
+        // 탱크 그리기
+        drawTank(state.p1, varColor('--p1-color'), state.turn === 1);
+        drawTank(state.p2, varColor('--p2-color'), state.turn === 2);
+
+        // 포탄 그리기
+        if (state.ball) {
+            ctx.fillStyle = 'white';
+            ctx.beginPath();
+            ctx.arc(state.ball.x, state.ball.y, 5, 0, Math.PI * 2);
+            ctx.fill();
+        }
+
+        // 가이드 라인 (내 차례일 때만)
+        if (input.active) {
+            drawGuide();
+        }
+
+        // 파티클
+        particles.forEach(p => {
+            ctx.globalAlpha = p.life;
+            ctx.fillStyle = p.color;
+            ctx.fillRect(p.x, p.y, 4, 4);
+        });
+        ctx.globalAlpha = 1;
+    }
+
+    function drawTank(p, color, isTurn) {
+        ctx.save();
+        ctx.translate(p.x, p.y);
+        
+        // 포신
+        ctx.strokeStyle = color;
+        ctx.lineWidth = 6;
+        ctx.lineCap = 'round';
+        ctx.beginPath();
+        ctx.moveTo(0, -10);
+        ctx.lineTo(Math.cos(p.angle) * 30, -10 + Math.sin(p.angle) * 30);
+        ctx.stroke();
+
+        // 몸체
+        ctx.fillStyle = color;
+        ctx.beginPath();
+        ctx.roundRect(-20, -10, 40, 15, 5);
+        ctx.fill();
+        
+        // 포탑
+        ctx.beginPath();
+        ctx.arc(0, -10, 10, Math.PI, 0);
+        ctx.fill();
+
+        // 현재 차례 표시
+        if (isTurn && !state.gameOver) {
+            ctx.fillStyle = 'white';
+            ctx.beginPath();
+            ctx.moveTo(-5, -35);
+            ctx.lineTo(5, -35);
+            ctx.lineTo(0, -25);
+            ctx.fill();
+        }
+
+        ctx.restore();
+    }
+
+    function drawGuide() {
+        const p = playerNum === 1 ? state.p1 : state.p2;
+        const dx = input.startX - input.currX;
+        const dy = input.startY - input.currY;
+        const power = Math.min(Math.sqrt(dx*dx + dy*dy) * 0.15, 20);
+        
+        ctx.beginPath();
+        ctx.setLineDash([5, 5]);
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.3)';
+        
+        let tx = p.x + Math.cos(p.angle) * 35;
+        let ty = p.y - 10 + Math.sin(p.angle) * 35;
+        let tvx = Math.cos(p.angle) * power;
+        let tvy = Math.sin(p.angle) * power;
+        
+        ctx.moveTo(tx, ty);
+        for (let i = 0; i < 30; i++) {
+            tvx += state.wind;
+            tvy += GRAVITY;
+            tx += tvx;
+            ty += tvy;
+            ctx.lineTo(tx, ty);
+        }
+        ctx.stroke();
+        ctx.setLineDash([]);
+    }
+
+    function updateUI() {
+        document.getElementById('hp1').style.width = (state.p1.hp / MAX_HP * 100) + '%';
+        document.getElementById('hp2').style.width = (state.p2.hp / MAX_HP * 100) + '%';
+        document.getElementById('wind-indicator').innerText = `WIND: ${Math.abs(state.wind * 100).toFixed(1)} ${state.wind > 0 ? '→' : '←'}`;
+        
+        if (state.gameOver) {
+            const winner = state.p1.hp > 0 ? "BLUE WINS!" : "RED WINS!";
+            const msg = document.getElementById('turn-msg');
+            msg.innerText = winner;
+            msg.style.color = state.p1.hp > 0 ? 'var(--p1-color)' : 'var(--p2-color)';
+            msg.classList.add('show');
+        }
+    }
+
+    function showTurnMessage() {
+        if (state.gameOver) return;
+        const msg = document.getElementById('turn-msg');
+        msg.innerText = state.turn === playerNum ? "YOUR TURN" : "ENEMY TURN";
+        msg.style.color = state.turn === playerNum ? 'var(--accent)' : 'white';
+        msg.classList.add('show');
+        setTimeout(() => msg.classList.remove('show'), 2000);
+    }
+
+    function varColor(name) {
+        return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+    }
+
+    function gameLoop() {
+        update();
+        draw();
+        requestAnimationFrame(gameLoop);
+    }
+
+</script>
 </body>
 </html>
