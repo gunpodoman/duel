@@ -2,228 +2,220 @@
 <html lang="ko">
 <head>
     <meta charset="UTF-8">
-    <title>Core Duel Online</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Core Duel: Online Fix</title>
     <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
     <style>
         :root { --bg: #1a1a2e; --card-bg: #16213e; --accent: #e94560; --text: #e9e9e9; }
-        body { background: var(--bg); color: var(--text); font-family: sans-serif; margin: 0; overflow: hidden; }
+        body { background: var(--bg); color: var(--text); font-family: sans-serif; margin: 0; display: flex; flex-direction: column; height: 100vh; }
         
-        #game-container { display: flex; height: 100vh; }
-        #board { flex: 1; display: flex; flex-direction: column; justify-content: space-around; padding: 20px; }
+        /* UI 및 레이아웃 */
+        #header { padding: 10px; background: #0f3460; display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid var(--accent); }
+        #game-area { flex: 1; display: flex; position: relative; }
+        #board { flex: 1; display: flex; flex-direction: column; justify-content: center; gap: 20px; }
+        #ui-side { width: 250px; background: rgba(0,0,0,0.5); padding: 15px; border-left: 1px solid #444; font-size: 14px; }
         
-        /* 필드 레이아웃 */
-        .field-row { display: flex; justify-content: center; gap: 20px; height: 150px; }
-        .slot { width: 100px; border: 2px dashed #444; border-radius: 10px; position: relative; }
+        .field-row { display: flex; justify-content: center; gap: 15px; min-height: 130px; }
+        .slot { width: 90px; height: 120px; border: 2px dashed #444; border-radius: 8px; }
         
-        /* 카드 스타일 */
-        .card { width: 100px; height: 140px; background: var(--card-bg); border: 2px solid var(--accent); 
-                border-radius: 8px; cursor: pointer; position: relative; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; font-size: 12px; }
-        .card.opponent { background: #444; }
-        .card .atk { position: absolute; bottom: 5px; right: 5px; color: gold; font-weight: bold; }
-        .card .cost { position: absolute; top: 5px; left: 5px; color: cyan; font-weight: bold; }
+        /* 카드 디자인 */
+        .card { width: 90px; height: 120px; background: var(--card-bg); border: 2px solid var(--accent); border-radius: 8px; position: relative; display: flex; flex-direction: column; align-items: center; justify-content: center; cursor: pointer; transition: transform 0.2s; }
+        .card:hover { transform: translateY(-10px); }
+        .card.opp { border-color: #555; background: #222; }
+        .card .atk { position: absolute; bottom: 5px; right: 5px; color: #f9d423; font-weight: bold; }
+        .card .cost { position: absolute; top: 5px; left: 5px; color: #4cc9f0; font-weight: bold; }
 
-        /* UI 영역 */
-        #ui-panel { width: 300px; background: #0f3460; padding: 20px; display: flex; flex-direction: column; gap: 10px; }
-        .status-box { background: rgba(0,0,0,0.3); padding: 10px; border-radius: 5px; }
-        #hand { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); display: flex; gap: 10px; }
+        #hand { position: absolute; bottom: 20px; left: 50%; transform: translateX(-50%); display: flex; gap: 10px; z-index: 10; }
         
-        button { background: var(--accent); border: none; color: white; padding: 10px; cursor: pointer; border-radius: 5px; }
-        button:disabled { background: #555; }
+        .btn { background: var(--accent); border: none; color: white; padding: 8px 15px; cursor: pointer; border-radius: 4px; }
+        .btn:disabled { background: #555; cursor: not-allowed; }
+        input { padding: 8px; border-radius: 4px; border: none; width: 120px; }
     </style>
 </head>
 <body>
 
-<div id="game-container">
-    <div id="board">
-        <div class="field-row" id="opponent-field">
-            <div class="slot" data-idx="0"></div>
-            <div class="slot" data-idx="1"></div>
-            <div class="slot" data-idx="2"></div>
-        </div>
-
-        <div style="text-align:center; color: #555;">VS</div>
-
-        <div class="field-row" id="my-field">
-            <div class="slot" data-idx="0"></div>
-            <div class="slot" data-idx="1"></div>
-            <div class="slot" data-idx="2"></div>
-        </div>
-    </div>
-
-    <div id="ui-panel">
-        <div class="status-box">
-            <h3>상대 라이프: <span id="opp-hp">10</span></h3>
-        </div>
-        <div class="status-box">
-            <h3>내 정보</h3>
-            <p>라이프: <span id="my-hp">10</span></p>
-            <p>에너지: <span id="my-energy">1</span></p>
-        </div>
-        <div id="connection-controls">
-            <p>내 ID: <b id="my-id">...</b></p>
-            <input type="text" id="opp-id-input" placeholder="상대 ID 입력">
-            <button onclick="connectToOpponent()">대전 시작</button>
-        </div>
-        <div id="game-controls" style="display:none;">
-            <p id="turn-display">상대 대기 중...</p>
-            <button id="end-turn-btn" onclick="endTurn()">턴 종료</button>
-        </div>
-        <div id="log" style="font-size: 12px; height: 100px; overflow-y: auto; background: #000; padding: 5px;"></div>
+<div id="header">
+    <div><b>Core Duel</b> <span id="status">● 대기 중</span></div>
+    <div id="conn-controls">
+        내 ID: <span id="my-id" style="color:yellow; font-weight:bold;">발급 중...</span>
+        <input type="text" id="opp-id-input" placeholder="상대 ID">
+        <button class="btn" onclick="connectToOpponent()">대전 신청</button>
     </div>
 </div>
 
-<div id="hand"></div>
+<div id="game-area">
+    <div id="board">
+        <div class="field-row" id="opp-field"><div class="slot"></div><div class="slot"></div><div class="slot"></div></div>
+        <div style="text-align:center; opacity:0.3;">──────────────── VS ────────────────</div>
+        <div class="field-row" id="my-field"><div class="slot"></div><div class="slot"></div><div class="slot"></div></div>
+    </div>
+
+    <div id="ui-side">
+        <p>상대 HP: <b id="opp-hp" style="color:var(--accent)">10</b></p>
+        <p>내 HP: <b id="my-hp" style="color:#4cc9f0">10</b></p>
+        <p>에너지: <b id="my-energy">1</b> / <span id="my-max-energy">1</span></p>
+        <hr>
+        <div id="turn-info">접속을 기다려주세요</div>
+        <button id="end-turn-btn" class="btn" onclick="endTurn()" disabled>턴 종료</button>
+        <div id="log" style="margin-top:10px; height:150px; overflow-y:auto; font-size:11px; color:#aaa;"></div>
+    </div>
+    
+    <div id="hand"></div>
+</div>
 
 <script>
-    // 1. 초기 데이터 및 카드 정의
     const cardPool = [
-        { id: 1, name: "졸병", atk: 2, cost: 1 },
-        { id: 2, name: "기사", atk: 4, cost: 2 },
-        { id: 3, name: "드래곤", atk: 7, cost: 3 }
+        { name: "용병", atk: 2, cost: 1 },
+        { name: "기사", atk: 4, cost: 2 },
+        { name: "드래곤", atk: 7, cost: 3 }
     ];
 
     let myState = { hp: 10, energy: 1, maxEnergy: 1, hand: [], field: [null, null, null], isMyTurn: false };
     let oppState = { hp: 10, field: [null, null, null] };
     let peer, conn;
 
-    // 2. PeerJS 설정 (온라인 연결)
-    peer = new Peer();
-    peer.on('open', id => { document.getElementById('my-id').innerText = id; });
-    peer.on('connection', c => { setupConnection(c); });
+    // 1. PeerJS 초기화 (공용 서버 안정성 설정)
+    peer = new Peer(null, { debug: 2 });
 
-    function connectToOpponent() {
-        const targetId = document.getElementById('opp-id-input').value;
-        setupConnection(peer.connect(targetId));
-    }
+    peer.on('open', id => {
+        document.getElementById('my-id').innerText = id;
+        log("내 ID가 생성되었습니다. 친구에게 공유하세요.");
+    });
 
-    function setupConnection(c) {
+    // 상대방이 나에게 연결했을 때
+    peer.on('connection', c => {
+        if (conn) return; // 이미 연결된 경우 차단
         conn = c;
+        setupConnection();
+        myState.isMyTurn = false; // 신청받은 쪽이 후공
+        startGame();
+    });
+
+    // 내가 상대방에게 연결할 때
+    function connectToOpponent() {
+        const tid = document.getElementById('opp-id-input').value;
+        if (!tid) return alert("상대 ID를 입력하세요.");
+        conn = peer.connect(tid);
+        setupConnection();
+        myState.isMyTurn = true; // 신청한 쪽이 선공
+        startGame();
+    }
+
+    function setupConnection() {
         conn.on('open', () => {
-            document.getElementById('connection-controls').style.display = 'none';
-            document.getElementById('game-controls').style.display = 'block';
-            startGame(conn.initiator);
+            document.getElementById('status').innerText = "● 연결됨";
+            document.getElementById('status').style.color = "#4cc9f0";
+            log("상대방과 연결되었습니다!");
         });
-        conn.on('data', data => handleOpponentAction(data));
+        conn.on('data', data => handleData(data));
+        conn.on('close', () => {
+            alert("연결이 끊어졌습니다.");
+            location.reload();
+        });
     }
 
-    // 3. 게임 로직
-    function startGame(isFirst) {
-        myState.isMyTurn = isFirst;
+    // 2. 게임 로직
+    function startGame() {
         drawCard(3);
+        if(myState.isMyTurn) log("당신의 선공입니다!");
         updateUI();
     }
 
-    function drawCard(count) {
-        for(let i=0; i<count; i++) {
-            const card = cardPool[Math.floor(Math.random()*cardPool.length)];
-            myState.hand.push({...card, instId: Date.now() + i});
+    function drawCard(n) {
+        for(let i=0; i<n; i++) {
+            const c = cardPool[Math.floor(Math.random()*cardPool.length)];
+            myState.hand.push({...c, uid: Math.random()});
         }
-        updateUI();
     }
 
-    function playCard(instId, slotIdx) {
+    function playCard(uid, slot) {
         if(!myState.isMyTurn) return;
-        const cardIdx = myState.hand.findIndex(c => c.instId === instId);
-        const card = myState.hand[cardIdx];
-
-        if(myState.energy >= card.cost && !myState.field[slotIdx]) {
+        const idx = myState.hand.findIndex(c => c.uid === uid);
+        const card = myState.hand[idx];
+        if(myState.energy >= card.cost && !myState.field[slot]) {
             myState.energy -= card.cost;
-            myState.field[slotIdx] = card;
-            myState.hand.splice(cardIdx, 1);
-            sendAction({ type: 'PLAY', card, slotIdx });
+            myState.field[slot] = card;
+            myState.hand.splice(idx, 1);
+            conn.send({ type: 'PLAY', card, slot });
             updateUI();
         }
     }
 
     function endTurn() {
-        if(!myState.isMyTurn) return;
         myState.isMyTurn = false;
         myState.maxEnergy = Math.min(myState.maxEnergy + 1, 5);
-        sendAction({ type: 'END_TURN', nextEnergy: myState.maxEnergy });
+        // 전투 처리
+        processBattle();
+        conn.send({ type: 'END_TURN', nextEnergy: myState.maxEnergy, hp: myState.hp });
         updateUI();
     }
 
-    // 4. 네트워크 통신
-    function sendAction(data) {
-        if(conn) conn.send(data);
-    }
-
-    function handleOpponentAction(data) {
+    function handleData(data) {
         if(data.type === 'PLAY') {
-            oppState.field[data.slotIdx] = data.card;
+            oppState.field[data.slot] = data.card;
             log(`상대가 ${data.card.name} 소환!`);
         } else if(data.type === 'END_TURN') {
             myState.isMyTurn = true;
             myState.energy = data.nextEnergy;
+            myState.maxEnergy = data.nextEnergy;
+            oppState.hp = data.hp;
             drawCard(1);
-            processBattle(); // 턴 시작 시 자동 전투
-            log(`내 턴 시작! (에너지 ${myState.energy})`);
+            log("내 턴 시작!");
         }
         updateUI();
     }
 
-    // 5. 전투 로직 (간소화: 마주 보는 카드끼리 공격)
     function processBattle() {
-        myState.field.forEach((card, i) => {
-            if(card) {
+        myState.field.forEach((c, i) => {
+            if(c) {
                 if(oppState.field[i]) {
-                    // 몬스터끼리 격돌 (동시 파괴 가정)
-                    log(`${card.name}와 상대 ${oppState.field[i].name} 격돌!`);
+                    log(`전투: ${c.name} vs ${oppState.field[i].name} (둘 다 파괴)`);
                     oppState.field[i] = null;
                     myState.field[i] = null;
                 } else {
-                    // 직접 공격
-                    oppState.hp -= card.atk;
-                    log(`직접 공격! 상대 HP: ${oppState.hp}`);
+                    oppState.hp -= c.atk;
+                    log(`직접 공격! 상대에게 ${c.atk} 데미지!`);
                 }
             }
         });
-        if(oppState.hp <= 0) alert("승리했습니다!");
-        sendAction({ type: 'BATTLE_RESULT', myHp: myState.hp, oppHp: oppState.hp });
+        if(oppState.hp <= 0) alert("승리!");
     }
 
-    // 6. UI 렌더링
     function updateUI() {
-        // 내 손패
-        const handDiv = document.getElementById('hand');
-        handDiv.innerHTML = '';
+        const handEl = document.getElementById('hand');
+        handEl.innerHTML = '';
         myState.hand.forEach(c => {
-            const el = document.createElement('div');
-            el.className = 'card';
-            el.innerHTML = `<b>${c.name}</b><span class="cost">${c.cost}</span><span class="atk">${c.atk}</span>`;
-            el.onclick = () => { 
-                const slot = prompt("소환할 슬롯 번호 (0, 1, 2)");
-                if(slot !== null) playCard(c.instId, parseInt(slot));
+            const div = document.createElement('div');
+            div.className = 'card';
+            div.innerHTML = `<span class="cost">${c.cost}</span><b>${c.name}</b><span class="atk">${c.atk}</span>`;
+            div.onclick = () => {
+                const s = prompt("소환할 위치 (0, 1, 2번 슬롯)");
+                if(s !== null) playCard(c.uid, parseInt(s));
             };
-            handDiv.appendChild(el);
+            handEl.appendChild(div);
         });
 
-        // 필드 렌더링
         renderField('my-field', myState.field, false);
-        renderField('opponent-field', oppState.field, true);
+        renderField('opp-field', oppState.field, true);
 
         document.getElementById('my-hp').innerText = myState.hp;
         document.getElementById('opp-hp').innerText = oppState.hp;
         document.getElementById('my-energy').innerText = myState.energy;
-        document.getElementById('turn-display').innerText = myState.isMyTurn ? "내 턴" : "상대 턴 대기 중...";
+        document.getElementById('my-max-energy').innerText = myState.maxEnergy;
         document.getElementById('end-turn-btn').disabled = !myState.isMyTurn;
+        document.getElementById('turn-info').innerText = myState.isMyTurn ? "당신의 차례" : "상대 차례 기다리는 중...";
     }
 
-    function renderField(id, fieldData, isOpp) {
+    function renderField(id, data, isOpp) {
         const slots = document.getElementById(id).children;
         for(let i=0; i<3; i++) {
-            slots[i].innerHTML = '';
-            if(fieldData[i]) {
-                const c = fieldData[i];
-                slots[i].innerHTML = `<div class="card ${isOpp?'opponent':''}"><b>${c.name}</b><span class="atk">${c.atk}</span></div>`;
-            }
+            slots[i].innerHTML = data[i] ? `<div class="card ${isOpp?'opp':''}"><b>${data[i].name}</b><span class="atk">${data[i].atk}</span></div>` : '';
         }
     }
 
-    function log(msg) {
+    function log(m) {
         const l = document.getElementById('log');
-        l.innerHTML += `<div>${msg}</div>`;
-        l.scrollTop = l.scrollHeight;
+        l.innerHTML = `<div>> ${m}</div>` + l.innerHTML;
     }
 </script>
 </body>
