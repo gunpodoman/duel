@@ -1,0 +1,128 @@
+:root { 
+    --p1: #3b82f6; 
+    --p2: #ef4444; 
+    --accent: #fbbf24; 
+    --bg: #020617; 
+}
+
+body { 
+    margin: 0; 
+    overflow: hidden; 
+    background: var(--bg); 
+    font-family: -apple-system, sans-serif; 
+    touch-action: none; 
+    color: white; 
+}
+
+/* 초기 오버레이 카드 디자인 */
+#overlay { 
+    position: fixed; 
+    inset: 0; 
+    background: radial-gradient(circle, #1e293b 0%, #020617 100%); 
+    z-index: 100; 
+    display: flex; 
+    align-items: center; 
+    justify-content: center; 
+}
+
+.card { 
+    background: rgba(255,255,255,0.03); 
+    padding: 40px; 
+    border-radius: 32px; 
+    border: 1px solid rgba(255,255,255,0.1); 
+    backdrop-filter: blur(20px); 
+    text-align: center; 
+    width: 300px; 
+}
+
+.btn { 
+    width: 100%; 
+    padding: 16px; 
+    background: var(--accent); 
+    border: none; 
+    border-radius: 16px; 
+    font-weight: 800; 
+    font-size: 18px; 
+    cursor: pointer; 
+    color: #000; 
+    box-shadow: 0 0 20px rgba(251,191,36,0.3); 
+    transition: transform 0.1s;
+}
+
+.btn:active {
+    transform: scale(0.98);
+}
+
+.btn:disabled { 
+    background: #334155; 
+    color: #94a3b8; 
+    cursor: wait; 
+    box-shadow: none;
+}
+
+/* 게임 UI 및 HUD */
+#game-ui { 
+    display: none; 
+    width: 100vw; 
+    height: 100vh; 
+    position: relative; 
+}
+
+.hud { 
+    position: absolute; 
+    top: 0; 
+    width: 100%; 
+    display: flex; 
+    justify-content: space-between; 
+    padding: 20px; 
+    box-sizing: border-box; 
+    pointer-events: none; 
+}
+
+.hp-box { 
+    background: rgba(0,0,0,0.5); 
+    padding: 10px 20px; 
+    border-radius: 15px; 
+    width: 140px; 
+    border-bottom: 4px solid transparent; 
+}
+
+.hp-bar { 
+    width: 100%; 
+    height: 8px; 
+    background: #1e293b; 
+    border-radius: 4px; 
+    margin-top: 5px; 
+    overflow: hidden; 
+}
+
+.hp-val { 
+    height: 100%; 
+    transition: width 0.3s; 
+}
+
+#wind-ui {
+    font-weight: 900; 
+    font-size: 14px; 
+    background: rgba(0,0,0,0.4); 
+    padding: 5px 15px; 
+    border-radius: 20px;
+    align-self: flex-start;
+}
+
+#msg { 
+    position: absolute; 
+    top: 120px; 
+    width: 100%; 
+    text-align: center; 
+    font-size: 36px; 
+    font-weight: 900; 
+    opacity: 0; 
+    transition: 0.4s; 
+    pointer-events: none; 
+}
+
+#msg.show { 
+    opacity: 1; 
+    transform: translateY(10px); 
+}
