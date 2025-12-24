@@ -1,8 +1,8 @@
 // --- [1] 게임 설정 및 상수 ---
 const GRAVITY = 0.25;
-const MAX_HP = 200;       // 체력 상향
-const SPLASH_RADIUS = 80; // 스플래시 범위
-const MAX_DAMAGE = 70;    // 직격 시 최대 데미지
+const MAX_HP = 200;
+const SPLASH_RADIUS = 80;
+const MAX_DAMAGE = 70;
 
 let canvas, ctx, w, h, myId, conn, isHost = false, myNum = 0;
 let particles = [];
@@ -42,7 +42,7 @@ function setupConn() {
 
 function sync() { if(isHost && conn?.open) conn.send({ type: 'SYNC', state }); updateUI(); }
 
-// --- [3] 물리 엔진 (스플래시 데미지 핵심) ---
+// --- [3] 물리 엔진 (스플래시 데미지 유지) ---
 function update() {
     if(!state.ball || state.gameOver) return;
 
@@ -53,12 +53,10 @@ function update() {
     const distP1 = Math.sqrt((b.x - state.p1.x)**2 + (b.y - (state.p1.y - 15))**2);
     const distP2 = Math.sqrt((b.x - state.p2.x)**2 + (b.y - (state.p2.y - 15))**2);
 
-    // 충돌 판정 (지면 충돌 혹은 탱크 근처)
     if(b.y > groundY || distP1 < 20 || distP2 < 20 || b.x < 0 || b.x > w) {
         createBoom(b.x, b.y);
         
         if(isHost) {
-            // 스플래시 데미지 계산 함수
             const calcDmg = (dist) => {
                 if (dist > SPLASH_RADIUS) return 0;
                 return Math.floor(MAX_DAMAGE * (1 - dist / SPLASH_RADIUS));
@@ -82,7 +80,7 @@ function update() {
     }
 }
 
-// --- [4] 그래픽 (맵 가시성 대폭 개선) ---
+// --- [4] 그래픽 (지형 가시성 개선) ---
 function draw() {
     ctx.clearRect(0,0,w,h);
     // 우주 배경
@@ -90,20 +88,24 @@ function draw() {
     sky.addColorStop(0,'#020617'); sky.addColorStop(1,'#0f172a');
     ctx.fillStyle = sky; ctx.fillRect(0,0,w,h);
     
-    // 지형 그리기 (그라데이션 추가)
+    // 지형 그리기 (그라데이션 및 테두리 추가)
     if(state.terrain.length) {
+        // 1. 지형 채우기 (그라데이션)
         ctx.beginPath(); ctx.moveTo(0, h);
         state.terrain.forEach(p => ctx.lineTo(p.x, p.y));
         ctx.lineTo(w, h); ctx.closePath();
         
         let terr = ctx.createLinearGradient(0, h*0.4, 0, h);
-        terr.addColorStop(0, '#334155'); terr.addColorStop(1, '#0f172a');
+        terr.addColorStop(0, '#334155'); // 상단: 밝은 남색
+        terr.addColorStop(1, '#0f172a'); // 하단: 어두운 남색
         ctx.fillStyle = terr; ctx.fill();
 
-        // 지형 윤곽선 (밝게)
+        // 2. 지형 윤곽선 그리기 (밝은 선)
         ctx.beginPath();
         state.terrain.forEach((p, i) => i === 0 ? ctx.moveTo(p.x, p.y) : ctx.lineTo(p.x, p.y));
-        ctx.strokeStyle = '#64748b'; ctx.lineWidth = 4; ctx.stroke();
+        ctx.strokeStyle = '#64748b'; // 밝은 회색 선
+        ctx.lineWidth = 3; // 선 두께
+        ctx.stroke();
     }
 
     drawTank(state.p1, 1); drawTank(state.p2, 2);
@@ -123,8 +125,8 @@ function draw() {
     });
 }
 
+// --- 나머지 보조 함수들 (유지) ---
 function updateUI() {
-    // 퍼센트 계산 (MAX_HP 기준)
     document.getElementById('hp1').style.width = (state.p1.hp / MAX_HP * 100) + '%';
     document.getElementById('hp2').style.width = (state.p2.hp / MAX_HP * 100) + '%';
     document.getElementById('wind-ui').innerText = `WIND: ${Math.abs(state.wind*100).toFixed(1)} ${state.wind>=0?'→':'←'}`;
@@ -138,8 +140,6 @@ function updateUI() {
     }
     msg.classList.add('show');
 }
-
-// --- 나머지 보조 함수들 (유지) ---
 function initCanvas() { canvas = document.getElementById('gameCanvas'); ctx = canvas.getContext('2d'); resize(); window.onresize = resize; setupInput(); }
 function resize() { w = canvas.width = window.innerWidth; h = canvas.height = window.innerHeight; }
 function createTerrain() {
