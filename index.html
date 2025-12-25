@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Cannon Duel Online - Mobile Optimized</title>
+    <title>Cannon Duel P2P - Manual Connect</title>
     <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
     <style>
         :root {
@@ -14,48 +14,55 @@
             margin: 0; padding: 0; width: 100%; height: 100%;
             overflow: hidden; background-color: var(--bg-color);
             font-family: system-ui, -apple-system, sans-serif;
-            color: white; touch-action: none; /* 아이패드 제스처 방지 */
+            color: white; touch-action: none;
         }
-        #game-container { position: relative; width: 100vw; height: 100vh; }
+        #game-container { position: relative; width: 100vw; height: 100vh; background: #020617; }
         canvas { display: block; width: 100%; height: 100%; }
 
-        /* UI Panels */
+        /* --- 로비 UI --- */
         #lobby {
             position: fixed; inset: 0; z-index: 100;
             background: radial-gradient(circle at center, #1e293b 0%, #020617 100%);
-            display: flex; align-items: center; justify-content: center;
+            display: flex; align-items: center; justify-content: center; padding: 20px;
         }
         .card {
-            background: rgba(30, 41, 59, 0.8); padding: 30px; border-radius: 24px;
+            background: rgba(30, 41, 59, 0.9); padding: 30px; border-radius: 24px;
             backdrop-filter: blur(15px); border: 1px solid rgba(255, 255, 255, 0.1);
-            text-align: center; width: 80%; max-width: 400px;
+            text-align: center; width: 100%; max-width: 350px;
+            box-shadow: 0 20px 50px rgba(0,0,0,0.5);
         }
+        h1 { margin: 0 0 10px; font-size: 1.8rem; color: var(--accent); }
+        .section { margin-bottom: 20px; padding: 15px; background: rgba(0,0,0,0.2); border-radius: 15px; }
+        .label { font-size: 0.75rem; color: #94a3b8; margin-bottom: 8px; display: block; }
+        
+        #my-id-display { font-family: monospace; font-weight: bold; font-size: 1.1rem; color: #fff; letter-spacing: 1px; }
+        
+        input {
+            width: 100%; padding: 12px; border-radius: 10px; border: 1px solid #475569;
+            background: #0f172a; color: white; text-align: center; font-family: monospace;
+            margin-bottom: 10px; box-sizing: border-box;
+        }
+        
         .btn {
             background: var(--accent); color: black; border: none;
-            padding: 15px; border-radius: 12px; font-weight: bold;
-            width: 100%; cursor: pointer; font-size: 1rem;
+            padding: 12px; border-radius: 10px; font-weight: bold;
+            width: 100%; cursor: pointer; transition: 0.2s;
         }
-        #status-badge {
-            display: inline-block; padding: 5px 15px; border-radius: 20px;
-            font-size: 0.8rem; margin-bottom: 15px; font-weight: bold;
-        }
-        .ready { background: #065f46; color: #34d399; }
-        .wait { background: #334155; color: #cbd5e1; }
+        .btn:active { transform: scale(0.98); }
+        .btn.secondary { background: #475569; color: white; margin-top: 5px; }
 
-        /* HUD */
+        /* --- 인게임 HUD --- */
         #hud {
             position: absolute; top: 20px; left: 0; right: 0;
             display: flex; justify-content: space-between; padding: 0 20px;
-            pointer-events: none; opacity: 0; transition: opacity 0.5s;
+            pointer-events: none; opacity: 0; transition: 0.5s;
         }
-        .player-info { background: rgba(0,0,0,0.4); padding: 10px; border-radius: 12px; width: 120px; }
-        .hp-bg { height: 8px; background: #334155; border-radius: 4px; margin-top: 5px; overflow: hidden; }
+        .player-info { background: rgba(0,0,0,0.4); padding: 10px; border-radius: 12px; width: 100px; }
+        .hp-bg { height: 6px; background: #334155; border-radius: 3px; margin-top: 5px; overflow: hidden; }
         .hp-fill { height: 100%; width: 100%; transition: width 0.3s; }
-        #wind-indicator { font-weight: bold; color: var(--accent); align-self: center; }
         #turn-msg {
-            position: absolute; top: 25%; width: 100%; text-align: center;
-            font-size: 2.5rem; font-weight: 900; pointer-events: none;
-            text-shadow: 0 0 20px rgba(0,0,0,0.5); display: none;
+            position: absolute; top: 20%; width: 100%; text-align: center;
+            font-size: 2rem; font-weight: 900; pointer-events: none; display: none;
         }
     </style>
 </head>
@@ -64,21 +71,32 @@
 <div id="lobby">
     <div class="card">
         <h1>CANNON DUEL</h1>
-        <div id="status-badge" class="wait">서버 연결 중...</div>
-        <button id="invite-btn" class="btn" onclick="copyInviteLink()" disabled>기다려 주세요</button>
-        <p id="conn-status" style="font-size: 0.8rem; color: #94a3b8; margin-top: 15px;">상대방이 링크를 타고 들어오면 시작됩니다.</p>
+        
+        <div class="section">
+            <span class="label">나의 접속 코드</span>
+            <div id="my-id-display">접속 중...</div>
+            <button id="copy-btn" class="btn secondary" onclick="copyMyId()" style="font-size: 0.8rem;">코드 복사</button>
+        </div>
+
+        <div class="section">
+            <span class="label">상대방 코드 입력</span>
+            <input type="text" id="peer-id-input" placeholder="상대방 코드를 붙여넣으세요">
+            <button id="join-btn" class="btn" onclick="connectToPeer()">게임 시작 (JOIN)</button>
+        </div>
+        
+        <p id="status-text" style="font-size: 0.75rem; color: #94a3b8;">코드를 교환하여 접속하세요.</p>
     </div>
 </div>
 
 <div id="game-container">
     <div id="hud">
         <div class="player-info">
-            <span style="color: var(--p1-color); font-size: 0.7rem;">P1 BLUE</span>
+            <div style="color: var(--p1-color); font-size: 0.6rem; font-weight: bold;">P1 BLUE</div>
             <div class="hp-bg"><div id="hp1" class="hp-fill" style="background: var(--p1-color);"></div></div>
         </div>
-        <div id="wind-indicator">WIND: 0.0 ←</div>
+        <div id="wind-indicator" style="color: var(--accent); font-weight: bold; font-size: 0.8rem;">WIND: 0.0</div>
         <div class="player-info" style="text-align: right;">
-            <span style="color: var(--p2-color); font-size: 0.7rem;">P2 RED</span>
+            <div style="color: var(--p2-color); font-size: 0.6rem; font-weight: bold;">P2 RED</div>
             <div class="hp-bg"><div id="hp2" class="hp-fill" style="background: var(--p2-color);"></div></div>
         </div>
     </div>
@@ -90,7 +108,7 @@
     const GRAVITY = 0.25;
     const MAX_HP = 100;
     let canvas, ctx, w, h;
-    let peer, conn, myId;
+    let peer, conn;
     let isHost = false;
     let playerNum = 0;
     let particles = [];
@@ -103,29 +121,39 @@
 
     let input = { active: false, startX: 0, startY: 0, currX: 0, currY: 0 };
 
-    // --- Networking ---
+    // --- 네트워킹 핵심 ---
     function initNetwork() {
+        // PeerJS 초기화
         peer = new Peer();
+        
         peer.on('open', id => {
-            myId = id;
-            const btn = document.getElementById('invite-btn');
-            btn.disabled = false;
-            btn.innerText = "초대 링크 복사";
-            document.getElementById('status-badge').innerText = "온라인";
-            document.getElementById('status-badge').className = "ready";
-            if(window.location.hash) connectToHost(window.location.hash.substring(1));
+            document.getElementById('my-id-display').innerText = id;
+            console.log('My ID:', id);
         });
 
+        // 상대방이 나에게 접속했을 때 (내가 호스트가 됨)
         peer.on('connection', c => {
             if (conn) return;
-            conn = c; isHost = true; playerNum = 1;
+            conn = c;
+            isHost = true;
+            playerNum = 1;
             setupConnection();
+        });
+
+        peer.on('error', err => {
+            alert("연결 오류가 발생했습니다: " + err.type);
         });
     }
 
-    function connectToHost(hostId) {
-        conn = peer.connect(hostId);
-        isHost = false; playerNum = 2;
+    // 내가 상대방 코드를 넣고 접속할 때 (내가 게스트가 됨)
+    function connectToPeer() {
+        const targetId = document.getElementById('peer-id-input').value.trim();
+        if (!targetId) return alert("상대방 코드를 입력하세요!");
+        
+        document.getElementById('status-text').innerText = "연결 시도 중...";
+        conn = peer.connect(targetId);
+        isHost = false;
+        playerNum = 2;
         setupConnection();
     }
 
@@ -133,29 +161,42 @@
         conn.on('open', () => {
             document.getElementById('lobby').style.display = 'none';
             document.getElementById('hud').style.opacity = '1';
-            initGame();
+            startGame();
         });
+
         conn.on('data', data => {
             if(data.type === 'SYNC') {
                 state = data.state;
                 updateUI();
             }
-            if(data.type === 'FIRE') state.ball = data.ball;
+            if(data.type === 'FIRE') {
+                state.ball = data.ball;
+            }
+        });
+
+        conn.on('close', () => {
+            alert("상대방과 연결이 끊어졌습니다.");
+            location.reload();
         });
     }
 
     function sendSync() {
-        if(isHost && conn && conn.open) conn.send({ type: 'SYNC', state: state });
+        if(isHost && conn && conn.open) {
+            conn.send({ type: 'SYNC', state: state });
+        }
     }
 
-    function copyInviteLink() {
-        const url = window.location.origin + window.location.pathname + '#' + myId;
-        navigator.clipboard.writeText(url);
-        document.getElementById('conn-status').innerText = "복사 완료! 친구에게 보내세요.";
+    function copyMyId() {
+        const idText = document.getElementById('my-id-display').innerText;
+        if(idText === "접속 중...") return;
+        navigator.clipboard.writeText(idText);
+        const btn = document.getElementById('copy-btn');
+        btn.innerText = "복사 완료!";
+        setTimeout(() => btn.innerText = "코드 복사", 2000);
     }
 
-    // --- Game Logic ---
-    function initGame() {
+    // --- 게임 로직 ---
+    function startGame() {
         canvas = document.getElementById('gameCanvas');
         ctx = canvas.getContext('2d');
         resize();
@@ -167,7 +208,7 @@
             state.p2.x = w * 0.85;
             state.p1.y = getTerrainHeight(state.p1.x);
             state.p2.y = getTerrainHeight(state.p2.x);
-            state.wind = (Math.random() - 0.5) * 0.2;
+            state.wind = (Math.random() - 0.5) * 0.25;
             setTimeout(sendSync, 500);
         }
 
@@ -187,7 +228,7 @@
     function generateTerrain() {
         state.terrain = [];
         let curH = h * 0.7;
-        for (let x = 0; x <= w + 50; x += 50) {
+        for (let x = 0; x <= w + 100; x += 50) {
             curH += (Math.random() - 0.5) * 120;
             curH = Math.max(h * 0.4, Math.min(h * 0.85, curH));
             state.terrain.push({x, y: curH});
@@ -248,7 +289,6 @@
         });
 
         if (!state.ball) return;
-
         const b = state.ball;
         b.vx += state.wind; b.vy += GRAVITY;
         b.x += b.vx; b.y += b.vy; b.age++;
@@ -258,7 +298,7 @@
         const dP2 = Math.hypot(b.x - state.p2.x, b.y - (state.p2.y - 10));
 
         let hit = b.y > gY || b.x < 0 || b.x > w;
-        if(b.age > 5) { // 자폭 방지 프레임
+        if(b.age > 5) {
             if(dP1 < 20 || dP2 < 20) hit = true;
         }
 
@@ -269,9 +309,7 @@
                 const dmg2 = calculateDmg(b.x, b.y, state.p2.x, state.p2.y);
                 state.p1.hp = Math.max(0, state.p1.hp - dmg1);
                 state.p2.hp = Math.max(0, state.p2.hp - dmg2);
-                
                 if (state.p1.hp <= 0 || state.p2.hp <= 0) state.gameOver = true;
-                
                 state.ball = null;
                 if(!state.gameOver) {
                     state.turn = state.turn === 1 ? 2 : 1;
@@ -279,16 +317,14 @@
                 }
                 sendSync();
                 showTurnMessage();
-            } else {
-                state.ball = null;
-            }
+            } else { state.ball = null; }
         }
     }
 
     function calculateDmg(bx, by, px, py) {
         const d = Math.hypot(bx - px, by - py);
-        if (d < 25) return 35; 
-        if (d < 60) return Math.floor(25 * (1 - d/60));
+        if (d < 25) return 40; 
+        if (d < 65) return Math.floor(30 * (1 - d/65));
         return 0;
     }
 
@@ -296,15 +332,13 @@
         for (let i = 0; i < 20; i++) {
             particles.push({
                 x, y, vx: (Math.random()-0.5)*8, vy: (Math.random()-0.5)*8,
-                life: 1, color: `rgb(255, ${Math.random()*100+50}, 0)`
+                life: 1, color: `rgb(255, ${Math.random()*150+50}, 0)`
             });
         }
     }
 
     function draw() {
         ctx.clearRect(0, 0, w, h);
-        
-        // 지형
         if (state.terrain.length > 0) {
             ctx.beginPath();
             ctx.moveTo(0, h);
@@ -312,16 +346,11 @@
             ctx.lineTo(w, h);
             ctx.fillStyle = '#1e293b';
             ctx.fill();
-            ctx.strokeStyle = '#475569';
-            ctx.lineWidth = 2;
-            ctx.stroke();
         }
 
-        // 탱크
         drawTank(state.p1, '#3b82f6', state.turn === 1);
         drawTank(state.p2, '#ef4444', state.turn === 2);
 
-        // 포탄
         if (state.ball) {
             ctx.fillStyle = 'white';
             ctx.beginPath();
@@ -329,19 +358,17 @@
             ctx.fill();
         }
 
-        // 가이드 라인
         if (input.active) {
             const p = playerNum === 1 ? state.p1 : state.p2;
             const dx = input.startX - input.currX;
             const dy = input.startY - input.currY;
             const pwr = Math.min(Math.hypot(dx, dy) * 0.12, 18);
-            
             ctx.beginPath();
             ctx.setLineDash([5, 8]);
             ctx.strokeStyle = 'rgba(255,255,255,0.4)';
             let tx = p.x, ty = p.y - 15, tvx = Math.cos(p.angle)*pwr, tvy = Math.sin(p.angle)*pwr;
             ctx.moveTo(tx, ty);
-            for(let i=0; i<20; i++) {
+            for(let i=0; i<25; i++) {
                 tvx += state.wind; tvy += GRAVITY; tx += tvx; ty += tvy;
                 ctx.lineTo(tx, ty);
             }
@@ -360,22 +387,17 @@
     function drawTank(p, color, isTurn) {
         ctx.save();
         ctx.translate(p.x, p.y);
-        
-        // 몸체
         ctx.fillStyle = color;
         ctx.fillRect(-15, -10, 30, 10);
         ctx.beginPath();
         ctx.arc(0, -10, 8, Math.PI, 0);
         ctx.fill();
-
-        // 포신
         ctx.strokeStyle = color;
         ctx.lineWidth = 4;
         ctx.beginPath();
         ctx.moveTo(0, -10);
         ctx.lineTo(Math.cos(p.angle)*25, -10 + Math.sin(p.angle)*25);
         ctx.stroke();
-
         if (isTurn && !state.gameOver) {
             ctx.fillStyle = 'white';
             ctx.beginPath();
@@ -404,9 +426,12 @@
         const msg = document.getElementById('turn-msg');
         msg.innerText = state.turn === playerNum ? "YOUR TURN" : "ENEMY TURN";
         msg.style.display = 'block';
+        msg.style.color = state.turn === playerNum ? varColor('--accent') : 'white';
         setTimeout(() => { if(!state.gameOver) msg.style.display = 'none'; }, 2000);
         updateUI();
     }
+
+    function varColor(name) { return getComputedStyle(document.documentElement).getPropertyValue(name).trim(); }
 
     function gameLoop() {
         update();
