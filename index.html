@@ -2,8 +2,8 @@
 <html lang="ko">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Cannon Duel - Pro Mobile</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>Cannon Duel - Item Drop Edition</title>
     <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
     <style>
         :root {
@@ -18,62 +18,42 @@
         #game-container { position: relative; width: 100vw; height: 100vh; background: #020617; }
         canvas { display: block; width: 100%; height: 100%; z-index: 1; }
 
-        /* --- 로비 UI --- */
+        /* --- 로비 --- */
         #lobby {
             position: fixed; inset: 0; z-index: 100;
-            background: rgba(15, 23, 42, 0.95);
+            background: rgba(15, 23, 42, 0.98);
             display: flex; align-items: center; justify-content: center; padding: 20px;
         }
-        .card {
-            background: #1e293b; padding: 25px; border-radius: 20px;
-            text-align: center; width: 100%; max-width: 320px; border: 1px solid #334155;
-        }
+        .card { background: #1e293b; padding: 25px; border-radius: 20px; text-align: center; width: 100%; max-width: 320px; }
         .section { margin-bottom: 15px; padding: 10px; background: rgba(0,0,0,0.2); border-radius: 12px; }
-        input {
-            width: 100%; padding: 12px; border-radius: 8px; border: 1px solid #475569;
-            background: #0f172a; color: white; text-align: center; margin-bottom: 10px; box-sizing: border-box;
-        }
-        .btn {
-            background: var(--accent); color: black; border: none;
-            padding: 12px; border-radius: 8px; font-weight: bold; width: 100%; cursor: pointer; margin-bottom: 5px;
-        }
+        input { width: 100%; padding: 12px; border-radius: 8px; border: 1px solid #475569; background: #0f172a; color: white; text-align: center; margin-bottom: 10px; box-sizing: border-box; }
+        .btn { background: var(--accent); color: black; border: none; padding: 12px; border-radius: 8px; font-weight: bold; width: 100%; cursor: pointer; margin-bottom: 5px; }
         .btn.secondary { background: #475569; color: white; }
 
-        /* --- 인게임 조작 UI (버튼) --- */
-        #ui-layer {
-            position: absolute; inset: 0; pointer-events: none; z-index: 10;
-        }
-        #hud {
-            display: flex; justify-content: space-between; padding: 15px 20px;
-        }
-        .player-info { background: rgba(0,0,0,0.6); padding: 8px; border-radius: 10px; width: 100px; pointer-events: none; }
-        .hp-bg { height: 8px; background: #334155; border-radius: 4px; margin-top: 4px; overflow: hidden; }
+        /* --- UI 레이어 --- */
+        #ui-layer { position: absolute; inset: 0; pointer-events: none; z-index: 10; padding-bottom: env(safe-area-inset-bottom); }
+        #hud { display: flex; justify-content: space-between; padding: 15px 20px; }
+        .player-info { background: rgba(0,0,0,0.7); padding: 10px; border-radius: 12px; width: 110px; border: 1px solid rgba(255,255,255,0.1); }
+        .hp-bg { height: 8px; background: #334155; border-radius: 4px; margin-top: 5px; overflow: hidden; }
         .hp-fill { height: 100%; width: 100%; transition: width 0.3s; }
-        .fuel-bg { height: 4px; background: #111827; border-radius: 2px; margin-top: 4px; }
+        .fuel-bg { height: 4px; background: #111827; border-radius: 2px; margin-top: 5px; }
         .fuel-fill { height: 100%; width: 100%; background: #22c55e; }
+        .inv-slot { font-size: 0.65rem; color: var(--accent); margin-top: 5px; font-weight: bold; }
 
         #controls {
-            position: absolute; bottom: 30px; left: 0; right: 0;
-            display: flex; flex-direction: column; align-items: center; gap: 15px;
+            position: absolute; bottom: 60px; left: 0; right: 0; /* 버튼 위치 상향 조정 */
+            display: flex; justify-content: center; gap: 40px;
         }
         .move-btns { display: flex; gap: 20px; pointer-events: auto; }
         .ctrl-btn {
-            width: 70px; height: 70px; background: rgba(255,255,255,0.15);
-            border: 2px solid white; border-radius: 50%;
-            color: white; font-size: 1.8rem; font-weight: bold;
-            display: flex; align-items: center; justify-content: center;
+            width: 80px; height: 80px; background: rgba(255,255,255,0.1);
+            border: 3px solid white; border-radius: 50%;
+            color: white; font-size: 2rem; display: flex; align-items: center; justify-content: center;
+            box-shadow: 0 0 15px rgba(0,0,0,0.5);
         }
-        .item-btns { display: flex; gap: 8px; pointer-events: auto; }
-        .item-btn {
-            padding: 10px 12px; background: #1e293b; border: 2px solid var(--accent);
-            border-radius: 8px; color: var(--accent); font-size: 0.75rem; font-weight: bold;
-        }
-        .item-btn.active { background: var(--accent); color: black; }
+        .ctrl-btn:active { background: rgba(255,255,255,0.3); transform: scale(0.95); }
 
-        #turn-msg {
-            position: absolute; top: 30%; width: 100%; text-align: center;
-            font-size: 1.5rem; font-weight: bold; pointer-events: none;
-        }
+        #turn-msg { position: absolute; top: 25%; width: 100%; text-align: center; font-size: 2rem; font-weight: 900; pointer-events: none; }
     </style>
 </head>
 <body>
@@ -82,15 +62,14 @@
     <div class="card">
         <h2 style="color:var(--accent); margin-top:0;">CANNON DUEL</h2>
         <div class="section">
-            <div style="font-size: 0.7rem; color: #94a3b8;">나의 코드</div>
-            <div id="my-id-display" style="font-size: 1.1rem; margin: 5px 0;">연결 중...</div>
-            <button class="btn secondary" onclick="copyMyId()">코드 복사</button>
+            <div id="my-id-display" style="font-family: monospace; font-size: 1rem; margin-bottom: 10px;">ID 생성 중...</div>
+            <button class="btn secondary" onclick="copyMyId()">내 코드 복사</button>
         </div>
         <div class="section">
             <input type="text" id="peer-id-input" placeholder="상대방 코드">
-            <button class="btn" onclick="connectToPeer()">대전 시작 (JOIN)</button>
+            <button class="btn" onclick="connectToPeer()">대전 시작</button>
         </div>
-        <button class="btn secondary" onclick="startPractice()">혼자 연습하기</button>
+        <button class="btn secondary" onclick="startPractice()">혼자 연습 모드</button>
     </div>
 </div>
 
@@ -101,26 +80,23 @@
                 <div style="color: var(--p1-color); font-size: 0.7rem; font-weight: bold;">P1 BLUE</div>
                 <div class="hp-bg"><div id="hp1" class="hp-fill" style="background: var(--p1-color);"></div></div>
                 <div class="fuel-bg"><div id="fuel1" class="fuel-fill"></div></div>
+                <div id="inv1" class="inv-slot">NEXT: NONE</div>
             </div>
-            <div id="wind-indicator" style="color: var(--accent); font-weight: bold; font-size: 0.8rem;">WIND: 0.0</div>
+            <div id="wind-indicator" style="color: var(--accent); font-weight: bold; font-size: 0.9rem;">WIND: 0.0</div>
             <div class="player-info" style="text-align: right;">
                 <div style="color: var(--p2-color); font-size: 0.7rem; font-weight: bold;">P2 RED</div>
                 <div class="hp-bg"><div id="hp2" class="hp-fill" style="background: var(--p2-color);"></div></div>
                 <div class="fuel-bg"><div id="fuel2" class="fuel-fill"></div></div>
+                <div id="inv2" class="inv-slot">NEXT: NONE</div>
             </div>
         </div>
 
         <div id="turn-msg">READY?</div>
 
         <div id="controls">
-            <div class="item-btns">
-                <button id="item-double" class="item-btn" onclick="useItem('double')">DOUBLE (1)</button>
-                <button id="item-big" class="item-btn" onclick="useItem('big')">BIG (1)</button>
-                <button id="item-heal" class="item-btn" onclick="useItem('heal')">HEAL (1)</button>
-            </div>
             <div class="move-btns">
-                <div class="ctrl-btn" ontouchstart="moveDir=-1" ontouchend="moveDir=0" onmousedown="moveDir=-1" onmouseup="moveDir=0">←</div>
-                <div class="ctrl-btn" ontouchstart="moveDir=1" ontouchend="moveDir=0" onmousedown="moveDir=1" onmouseup="moveDir=0">→</div>
+                <div class="ctrl-btn" id="btn-left" ontouchstart="setMove(-1)" ontouchend="setMove(0)" onmousedown="setMove(-1)" onmouseup="setMove(0)">←</div>
+                <div class="ctrl-btn" id="btn-right" ontouchstart="setMove(1)" ontouchend="setMove(0)" onmousedown="setMove(1)" onmouseup="setMove(0)">→</div>
             </div>
         </div>
     </div>
@@ -135,13 +111,14 @@
     let peer, conn, isHost = true, playerNum = 1, moveDir = 0, practiceMode = false;
     
     let state = {
-        p1: { x: 100, y: 0, hp: MAX_HP, fuel: MAX_FUEL, angle: -Math.PI/4, items: {double:1, big:1, heal:1} },
-        p2: { x: 500, y: 0, hp: MAX_HP, fuel: MAX_FUEL, angle: -Math.PI*0.75, items: {double:1, big:1, heal:1} },
-        terrain: [], wind: 0, turn: 1, ball: null, gameOver: false, activeItem: null, shotsFired: 0
+        p1: { x: 0, y: 0, hp: MAX_HP, fuel: MAX_FUEL, angle: -Math.PI/4, queuedItem: null, activeItem: null },
+        p2: { x: 0, y: 0, hp: MAX_HP, fuel: MAX_FUEL, angle: -Math.PI*0.75, queuedItem: null, activeItem: null },
+        terrain: [], items: [], wind: 0, turn: 1, ball: null, gameOver: false, shotsFired: 0
     };
 
     let input = { active: false, startX: 0, startY: 0, currX: 0, currY: 0 };
 
+    // --- 네트워킹 ---
     function initNetwork() {
         peer = new Peer(undefined, { config: { 'iceServers': [{ 'urls': 'stun:stun.l.google.com:19302' }] } });
         peer.on('open', id => document.getElementById('my-id-display').innerText = id);
@@ -162,26 +139,25 @@
         });
     }
 
-    function startPractice() {
-        practiceMode = true;
-        document.getElementById('lobby').style.display = 'none';
-        startGame();
-    }
+    function startPractice() { practiceMode = true; document.getElementById('lobby').style.display = 'none'; startGame(); }
 
     function startGame() {
         canvas = document.getElementById('gameCanvas'); ctx = canvas.getContext('2d');
         resize(); window.addEventListener('resize', resize);
         
-        generateTerrain();
-        state.p1.x = w * 0.15; state.p2.x = w * 0.85;
-        state.p1.y = getTerrainHeight(state.p1.x); state.p2.y = getTerrainHeight(state.p2.x);
+        if (isHost || practiceMode) {
+            generateTerrain();
+            state.p1.x = w * 0.15; state.p2.x = w * 0.85;
+            state.p1.y = getTerrainHeight(state.p1.x); state.p2.y = getTerrainHeight(state.p2.x);
+            spawnItem(); spawnItem(); // 초기 아이템 2개
+        }
         
         canvas.addEventListener('touchstart', e => handleStart(e.touches[0]), {passive:false});
         canvas.addEventListener('touchmove', e => handleMove(e.touches[0]), {passive:false});
         canvas.addEventListener('touchend', handleEnd);
         
         requestAnimationFrame(gameLoop);
-        showTurnMessage();
+        updateUI();
     }
 
     function generateTerrain() {
@@ -191,6 +167,12 @@
             curH = Math.max(h * 0.4, Math.min(h * 0.85, curH));
             state.terrain.push({x, y: curH});
         }
+    }
+
+    function spawnItem() {
+        const x = Math.random() * (w - 100) + 50;
+        const types = ['DOUBLE', 'BIG', 'HEAL'];
+        state.items.push({ x, y: getTerrainHeight(x) - 15, type: types[Math.floor(Math.random()*types.length)] });
     }
 
     function getTerrainHeight(x) {
@@ -204,43 +186,79 @@
         return h;
     }
 
+    // 이동 제어 강화
+    function setMove(dir) {
+        if(state.turn === playerNum && !state.ball && !state.gameOver) moveDir = dir;
+        else moveDir = 0;
+    }
+
     function update() {
+        // 이동 처리
         if(moveDir !== 0 && !state.ball && !state.gameOver) {
             const p = (state.turn === 1) ? state.p1 : state.p2;
             if(p.fuel > 0) {
-                p.x += moveDir * 2.5; p.x = Math.max(20, Math.min(w-20, p.x));
-                p.y = getTerrainHeight(p.x); p.fuel -= 1.5;
+                p.x += moveDir * 2.5;
+                p.x = Math.max(20, Math.min(w-20, p.x));
+                p.y = getTerrainHeight(p.x);
+                p.fuel -= 1.2;
+                
+                // 아이템 습득 체크 (몸체)
+                state.items.forEach((item, index) => {
+                    if (Math.hypot(p.x - item.x, p.y - item.y) < 30) {
+                        p.queuedItem = item.type;
+                        state.items.splice(index, 1);
+                        if(isHost || practiceMode) spawnItem();
+                    }
+                });
                 if(conn?.open) sendSync();
             }
         }
 
+        // 포탄 처리
         if (!state.ball) return;
         const b = state.ball;
         b.vx += state.wind; b.vy += GRAVITY; b.x += b.vx; b.y += b.vy; b.age++;
 
+        // 아이템 격추 체크
+        state.items.forEach((item, index) => {
+            if (Math.hypot(b.x - item.x, b.y - item.y) < 25) {
+                const p = (state.turn === 1) ? state.p1 : state.p2;
+                p.queuedItem = item.type;
+                state.items.splice(index, 1);
+                if(isHost || practiceMode) spawnItem();
+            }
+        });
+
         const gY = getTerrainHeight(b.x);
-        const hit = b.y > gY || b.x < 0 || b.x > w || (b.age > 5 && (Math.hypot(b.x-state.p1.x, b.y-state.p1.y)<20 || Math.hypot(b.x-state.p2.x, b.y-state.p2.y)<20));
+        const hit = b.y > gY || b.x < 0 || b.x > w || (b.age > 5 && (Math.hypot(b.x-state.p1.x, b.y-state.p1.y+10)<25 || Math.hypot(b.x-state.p2.x, b.y-state.p2.y+10)<25));
 
         if (hit) {
-            const isBig = b.type === 'big';
+            const isBig = b.type === 'BIG';
             if (isHost || practiceMode) {
-                const radius = isBig ? 100 : 60;
+                const radius = isBig ? 100 : 65;
                 state.p1.hp = Math.max(0, state.p1.hp - calculateDmg(b.x, b.y, state.p1.x, state.p1.y, radius));
                 state.p2.hp = Math.max(0, state.p2.hp - calculateDmg(b.x, b.y, state.p2.x, state.p2.y, radius));
+                
                 if (state.p1.hp <= 0 || state.p2.hp <= 0) state.gameOver = true;
                 
                 state.ball = null;
                 if(!state.gameOver) {
-                    if(state.shotsFired === 1 && state.activeItem === 'double') { 
-                        // 한 번 더 쏨
+                    if(state.shotsFired === 1 && b.type === 'DOUBLE') {
+                        // 한 번 더 쏘기
                     } else {
-                        if(state.shotsFired > 0 && state.activeItem === 'double') {
-                            const p = state.turn === 1 ? state.p1 : state.p2;
-                            p.items.double--;
-                        }
                         state.turn = state.turn === 1 ? 2 : 1;
-                        state.shotsFired = 0; state.activeItem = null;
-                        state.wind = (Math.random() - 0.5) * 0.4;
+                        const nextP = (state.turn === 1) ? state.p1 : state.p2;
+                        
+                        // 턴 교체 시 저장된 아이템 활성화
+                        nextP.activeItem = nextP.queuedItem;
+                        nextP.queuedItem = null;
+                        if(nextP.activeItem === 'HEAL') {
+                            nextP.hp = Math.min(MAX_HP, nextP.hp + 25);
+                            nextP.activeItem = null;
+                        }
+
+                        state.shotsFired = 0;
+                        state.wind = (Math.random() - 0.5) * 0.45;
                         state.p1.fuel = MAX_FUEL; state.p2.fuel = MAX_FUEL;
                     }
                 }
@@ -250,67 +268,69 @@
         }
     }
 
-    function useItem(type) {
-        if(state.ball || state.gameOver) return;
-        const p = state.turn === 1 ? state.p1 : state.p2;
-        if(p.items[type] > 0) {
-            if(type === 'heal') { p.hp = Math.min(MAX_HP, p.hp+20); p.items.heal--; }
-            else { state.activeItem = (state.activeItem === type) ? null : type; }
-            updateUI();
-            if(conn?.open) sendSync();
-        }
-    }
-
     function handleStart(e) {
-        if(state.ball || state.gameOver) return;
+        if(state.turn !== playerNum || state.ball || state.gameOver) return;
         input.active = true; input.startX = e.clientX; input.startY = e.clientY;
     }
     function handleMove(e) {
         if(!input.active) return;
         input.currX = e.clientX; input.currY = e.clientY;
         const dx = input.startX - input.currX, dy = input.startY - input.currY;
-        const p = state.turn === 1 ? state.p1 : state.p2;
+        const p = (state.turn === 1) ? state.p1 : state.p2;
         p.angle = Math.atan2(dy, dx);
     }
     function handleEnd() {
         if(!input.active) return; input.active = false;
         const dx = input.startX - input.currX, dy = input.startY - input.currY;
-        const pwr = Math.min(Math.hypot(dx, dy) * 0.12, 18);
+        const pwr = Math.min(Math.hypot(dx, dy) * 0.12, 19);
         if(pwr > 3) {
-            const p = state.turn === 1 ? state.p1 : state.p2;
-            const ball = { x: p.x, y: p.y - 15, vx: Math.cos(p.angle)*pwr, vy: Math.sin(p.angle)*pwr, age: 0, type: state.activeItem };
+            const p = (state.turn === 1) ? state.p1 : state.p2;
+            const ball = { x: p.x, y: p.y - 15, vx: Math.cos(p.angle)*pwr, vy: Math.sin(p.angle)*pwr, age: 0, type: p.activeItem };
             state.ball = ball;
-            if(state.activeItem === 'double') state.shotsFired++;
-            if(state.activeItem === 'big') { p.items.big--; state.activeItem = null; }
+            if(p.activeItem === 'DOUBLE') state.shotsFired++;
+            if(p.activeItem === 'BIG') p.activeItem = null;
             if(conn?.open) conn.send({ type: 'FIRE', ball });
         }
     }
 
     function calculateDmg(bx, by, px, py, r) {
         const d = Math.hypot(bx - px, by - py);
-        return d < r ? Math.floor((r/2) * (1 - d/r)) : 0;
+        return d < r ? Math.floor((r/1.8) * (1 - d/r)) : 0;
     }
 
     function draw() {
         ctx.clearRect(0, 0, w, h);
+        // 지형
         if (state.terrain.length > 0) {
             ctx.beginPath(); ctx.moveTo(0, h);
             state.terrain.forEach(p => ctx.lineTo(p.x, p.y));
             ctx.lineTo(w, h); ctx.fillStyle = '#1e293b'; ctx.fill();
         }
+        // 아이템
+        state.items.forEach(item => {
+            ctx.fillStyle = '#f59e0b';
+            ctx.fillRect(item.x - 10, item.y - 10, 20, 20);
+            ctx.fillStyle = 'black';
+            ctx.font = 'bold 12px sans-serif';
+            ctx.fillText(item.type[0], item.x - 4, item.y + 5);
+        });
+
         drawTank(state.p1, '#3b82f6', state.turn === 1);
         drawTank(state.p2, '#ef4444', state.turn === 2);
+
         if (state.ball) {
-            ctx.fillStyle = state.ball.type === 'big' ? '#f59e0b' : 'white';
-            ctx.beginPath(); ctx.arc(state.ball.x, state.ball.y, state.ball.type==='big'?8:4, 0, Math.PI*2); ctx.fill();
+            ctx.fillStyle = state.ball.type === 'BIG' ? '#f59e0b' : 'white';
+            ctx.beginPath(); ctx.arc(state.ball.x, state.ball.y, state.ball.type==='BIG'?9:4, 0, Math.PI*2); ctx.fill();
         }
+
+        // 궤적 가이드
         if (input.active) {
-            const p = state.turn === 1 ? state.p1 : state.p2;
+            const p = (state.turn === 1) ? state.p1 : state.p2;
             const dx = input.startX - input.currX, dy = input.startY - input.currY;
-            const pwr = Math.min(Math.hypot(dx, dy) * 0.12, 18);
-            ctx.beginPath(); ctx.setLineDash([5, 5]); ctx.strokeStyle = 'rgba(255,255,255,0.3)';
+            const pwr = Math.min(Math.hypot(dx, dy) * 0.12, 19);
+            ctx.beginPath(); ctx.setLineDash([4, 4]); ctx.strokeStyle = 'rgba(255,255,255,0.4)';
             let tx = p.x, ty = p.y - 15, tvx = Math.cos(p.angle)*pwr, tvy = Math.sin(p.angle)*pwr;
-            for(let i=0; i<15; i++) { tvx += state.wind; tvy += GRAVITY; tx += tvx; ty += tvy; ctx.lineTo(tx, ty); }
+            for(let i=0; i<18; i++) { tvx += state.wind; tvy += GRAVITY; tx += tvx; ty += tvy; ctx.lineTo(tx, ty); }
             ctx.stroke(); ctx.setLineDash([]);
         }
     }
@@ -321,8 +341,15 @@
         ctx.beginPath(); ctx.arc(0, -10, 8, Math.PI, 0); ctx.fill();
         ctx.strokeStyle = color; ctx.lineWidth = 4; ctx.beginPath(); ctx.moveTo(0, -10);
         ctx.lineTo(Math.cos(p.angle)*25, -10 + Math.sin(p.angle)*25); ctx.stroke();
+        
+        // 아이템 효과 표시
+        if(p.activeItem) {
+            ctx.fillStyle = '#f59e0b'; ctx.font = 'bold 10px sans-serif';
+            ctx.fillText("ITEM: " + p.activeItem, -20, -45);
+        }
+
         if (isTurn && !state.gameOver) {
-            ctx.fillStyle = 'white'; ctx.beginPath(); ctx.moveTo(0, -35); ctx.lineTo(-5, -45); ctx.lineTo(5, -45); ctx.fill();
+            ctx.fillStyle = 'white'; ctx.beginPath(); ctx.moveTo(0, -30); ctx.lineTo(-5, -40); ctx.lineTo(5, -40); ctx.fill();
         }
         ctx.restore();
     }
@@ -332,33 +359,28 @@
         document.getElementById('hp2').style.width = state.p2.hp + '%';
         document.getElementById('fuel1').style.width = state.p1.fuel + '%';
         document.getElementById('fuel2').style.width = state.p2.fuel + '%';
+        document.getElementById('inv1').innerText = "NEXT: " + (state.p1.queuedItem || "NONE");
+        document.getElementById('inv2').innerText = "NEXT: " + (state.p2.queuedItem || "NONE");
         document.getElementById('wind-indicator').innerText = `WIND: ${Math.abs(state.wind*100).toFixed(1)} ${state.wind > 0 ? '→' : '←'}`;
         
-        const p = state.turn === 1 ? state.p1 : state.p2;
-        const items = ['double', 'big', 'heal'];
-        items.forEach(type => {
-            const btn = document.getElementById('item-' + type);
-            btn.innerText = `${type.toUpperCase()} (${p.items[type]})`;
-            btn.className = 'item-btn' + (state.activeItem === type ? ' active' : '');
-            btn.disabled = p.items[type] <= 0;
-        });
-
         if (state.gameOver) {
-            document.getElementById('turn-msg').innerText = state.p1.hp > 0 ? "BLUE WIN!" : "RED WIN!";
-            document.getElementById('turn-msg').style.display = 'block';
+            const msg = document.getElementById('turn-msg');
+            msg.innerText = state.p1.hp > 0 ? "BLUE WIN!" : "RED WIN!";
+            msg.style.color = state.p1.hp > 0 ? '#3b82f6' : '#ef4444';
         }
     }
 
     function showTurnMessage() {
         if (state.gameOver) return;
         const msg = document.getElementById('turn-msg');
-        msg.innerText = (state.turn === 1 ? "BLUE" : "RED") + " TURN";
+        const isMyTurn = state.turn === playerNum;
+        msg.innerText = isMyTurn ? "YOUR TURN" : "ENEMY TURN";
         msg.style.color = state.turn === 1 ? '#3b82f6' : '#ef4444';
         updateUI();
     }
 
-    function sendSync() { if(conn?.open) conn.send({ type: 'SYNC', state }); }
-    function copyMyId() { navigator.clipboard.writeText(document.getElementById('my-id-display').innerText); alert("복사됨!"); }
+    function sendSync() { if(isHost && conn?.open) conn.send({ type: 'SYNC', state }); }
+    function copyMyId() { navigator.clipboard.writeText(document.getElementById('my-id-display').innerText); alert("복사됨"); }
     function resize() { w = canvas.width = window.innerWidth; h = canvas.height = window.innerHeight; }
     function gameLoop() { update(); draw(); requestAnimationFrame(gameLoop); }
 
